@@ -19,7 +19,7 @@
     const gate = document.getElementById("gate");
     if (gate) gate.remove();
     const s = document.createElement("script");
-    s.src = "app.js";
+    s.src = "app.js?v=6832bca4a8";
     document.body.appendChild(s);
   }
 
