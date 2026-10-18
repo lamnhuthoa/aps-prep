@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>APS Prep · Hoa</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="APS Prep">
+  <meta name="theme-color" content="#b4232a">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="icon" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+  <script>
+    // Apply the saved theme before first paint to avoid a flash.
+    try {
+      var theme = (JSON.parse(localStorage.getItem("aps-prep-v1")) || {}).settings.theme;
+      if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+    } catch (e) {}
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">APS Prep <span class="brand-sub">International Business · UEH</span></div>
+    <button class="theme-btn" id="btn-theme" title="Đổi giao diện sáng/tối"></button>
+    <div class="lang-toggle" title="Ngôn ngữ hiển thị câu hỏi và đáp án">
+      <button class="lang-btn" data-lang="en">EN</button>
+      <button class="lang-btn" data-lang="both">EN + VI</button>
+      <button class="lang-btn" data-lang="vi">VI</button>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-view="today">Hôm nay</button>
+      <button class="tab" data-view="practice">Luyện tập</button>
+      <button class="tab" data-view="mock">Thi thử</button>
+      <button class="tab" data-view="progress">Tiến độ</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- TODAY -->
+    <section id="view-today" class="view active">
+      <div class="grid-3">
+        <div class="panel stat">
+          <div class="stat-label">Còn lại tới ngày thi</div>
+          <div class="stat-value" id="countdown">–</div>
+          <div class="stat-foot" id="exam-date-label"></div>
+        </div>
+        <div class="panel stat">
+          <div class="stat-label">Chuỗi ngày học</div>
+          <div class="stat-value" id="streak">0</div>
+          <div class="stat-foot" id="streak-best"></div>
+        </div>
+        <div class="panel stat">
+          <div class="stat-label">Đã thuộc</div>
+          <div class="stat-value" id="mastered-pct">0%</div>
+          <div class="stat-foot" id="mastered-count"></div>
+        </div>
+      </div>
+
+      <div class="panel checkin-panel">
+        <div>
+          <h2 id="checkin-title">Bạn chưa điểm danh hôm nay</h2>
+          <p class="muted" id="checkin-sub">Điểm danh rồi ôn ít nhất <span class="goal-n"></span> thẻ để giữ chuỗi.</p>
+          <div class="goal-bar"><div class="goal-fill" id="goal-fill"></div></div>
+          <p class="muted small" id="goal-text"></p>
+        </div>
+        <div class="checkin-actions">
+          <button class="btn btn-ghost" id="btn-checkin">✓ Điểm danh</button>
+          <button class="btn btn-primary" id="btn-start-today">Bắt đầu ôn hôm nay →</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3>12 tuần gần nhất</h3>
+          <div class="legend"><span>Ít</span><i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i><span>Nhiều</span></div>
+        </div>
+        <div class="heatmap" id="heatmap"></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <h3>Hàng đợi hôm nay</h3>
+          <ul class="queue" id="queue-summary"></ul>
+        </div>
+        <div class="panel">
+          <h3>Câu hay sai nhất</h3>
+          <ol class="weak-list" id="weak-list"></ol>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRACTICE -->
+    <section id="view-practice" class="view">
+      <div class="panel filters">
+        <label>Nguồn
+          <select id="f-source"></select>
+        </label>
+        <label>Phần
+          <select id="f-section"></select>
+        </label>
+        <label>Chế độ
+          <select id="f-mode">
+            <option value="due">Đến hạn + mới</option>
+            <option value="random">Ngẫu nhiên tất cả</option>
+            <option value="weak">Câu hay sai</option>
+            <option value="new">Chỉ câu mới</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="f-star"> Chỉ câu ⭐</label>
+        <button class="btn btn-primary" id="btn-start-practice">Bắt đầu</button>
+      </div>
+      <div id="practice-area"></div>
+    </section>
+
+    <!-- MOCK -->
+    <section id="view-mock" class="view">
+      <div id="mock-area"></div>
+    </section>
+
+    <!-- PROGRESS -->
+    <section id="view-progress" class="view">
+      <div class="panel">
+        <div class="panel-head">
+          <h3>Tiến độ theo phần</h3>
+          <div class="legend"><i class="seg-m"></i><span>Đã thuộc</span><i class="seg-l"></i><span>Đang học</span><i class="seg-n"></i><span>Chưa học</span></div>
+        </div>
+        <div id="progress-list"></div>
+      </div>
+      <div class="panel settings">
+        <h3>Cài đặt và sao lưu</h3>
+        <div class="settings-row">
+          <label>Ngày thi <input type="date" id="s-exam"></label>
+          <label>Mục tiêu mỗi ngày <input type="number" id="s-goal" min="5" max="200" step="5"></label>
+        </div>
+        <p class="muted small">Tiến độ chỉ lưu trong trình duyệt này. Xuất file backup thường xuyên, nhất là trước khi xóa lịch sử trình duyệt hoặc đổi máy.</p>
+        <div class="settings-row">
+          <button class="btn btn-ghost" id="btn-export">⬇ Xuất backup</button>
+          <label class="btn btn-ghost file-btn">⬆ Nhập backup<input type="file" id="file-import" accept="application/json"></label>
+          <button class="btn btn-danger" id="btn-reset">Xóa toàn bộ tiến độ</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot muted small" id="foot"></footer>
+
+  <script src="questions.enc.js"></script>
+  <script src="unlock.js"></script>
+</body>
+</html>
