@@ -9,6 +9,9 @@
   const INTERVALS = [0, 1, 2, 4, 7, 14, 30];
   const MASTERED_BOX = 4;
   const SOURCE_ORDER = ["subject", "reported", "thesis", "calc", "personal"];
+  // The last days before the exam are for review only: no new cards, and the final reviews are spread over them.
+  const REVIEW_ONLY_DAYS = 3;
+  const DEVICE_KEY = "aps-prep-device";
 
   // ---------- dates ----------
   function dateKey(d) {
@@ -27,8 +30,17 @@
 
   // ---------- state ----------
   function defaultState() {
-    return { cards: {}, days: {}, settings: { examDate: "2026-11-19", dailyGoal: 20, lang: "both" } };
+    return { cards: {}, days: {}, mocks: [], settings: { examDate: "2026-11-19", dailyGoal: 25, lang: "both" } };
   }
+  // Each browser gets its own id, kept outside the backup, so merged daily counts from two devices add up correctly.
+  const DEVICE = (() => {
+    let id = localStorage.getItem(DEVICE_KEY);
+    if (!id) {
+      id = "d-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      localStorage.setItem(DEVICE_KEY, id);
+    }
+    return id;
+  })();
   function loadState() {
     try {
       const raw = JSON.parse(localStorage.getItem(STORAGE_KEY));
@@ -41,18 +53,78 @@
   let state = loadState();
   function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
 
+  // Day records keep per-device counts in `dev`; reviewed/good/newSeen are their sums.
+  // Days recorded before devices were tracked keep their counts under "legacy".
+  const DAY_FIELDS = ["reviewed", "good", "newSeen"];
+  function normalizeDay(day) {
+    if (!day.dev) day.dev = { legacy: { reviewed: day.reviewed || 0, good: day.good || 0, newSeen: day.newSeen || 0 } };
+    for (const f of DAY_FIELDS) day[f] = Object.values(day.dev).reduce((sum, d) => sum + (d[f] || 0), 0);
+    return day;
+  }
   function dayRecord(key) {
-    if (!state.days[key]) state.days[key] = { checkedIn: false, reviewed: 0, good: 0 };
-    return state.days[key];
+    if (!state.days[key]) state.days[key] = { checkedIn: false, dev: {} };
+    const day = normalizeDay(state.days[key]);
+    if (!day.dev[DEVICE]) day.dev[DEVICE] = { reviewed: 0, good: 0, newSeen: 0 };
+    return day;
+  }
+  function dayStats(key) {
+    return state.days[key] ? normalizeDay(state.days[key]) : { checkedIn: false, reviewed: 0, good: 0, newSeen: 0 };
   }
   function cardStatus(id) {
     const rec = state.cards[id];
     if (!rec) return "new";
     return rec.box >= MASTERED_BOX ? "mastered" : "learning";
   }
-  function isDue(id, key) {
+
+  // ---------- pacing towards the exam ----------
+  function lastNewDay() { return addDays(state.settings.examDate, -(REVIEW_ONLY_DAYS + 1)); }
+  // A review that would fall after the exam is moved into the review-only days before it,
+  // spread by card so they do not all land on the same day. The stored due date is kept,
+  // so changing the exam date recalculates this.
+  function dueOf(id) {
     const rec = state.cards[id];
-    return rec && rec.due <= key;
+    let spread = 0;
+    for (const ch of id) spread = (spread * 31 + ch.charCodeAt(0)) % 997;
+    const finalReview = addDays(state.settings.examDate, -1 - (spread % REVIEW_ONLY_DAYS));
+    return rec.due > finalReview && finalReview > rec.last ? finalReview : rec.due;
+  }
+  function isDue(id, key) {
+    return Boolean(state.cards[id]) && dueOf(id) <= key;
+  }
+  // Order for new cards: questions from real interview reports, then ⭐, then the rest mixed across sources.
+  function newPriority(card) {
+    if ((card.subsection || "").startsWith("12.") || card.source === "reported") return 0;
+    return card.star ? 1 : 2;
+  }
+  const SOURCE_POS = (() => {
+    const seen = {}, total = {}, pos = {};
+    for (const c of CARDS) total[c.source] = (total[c.source] || 0) + 1;
+    for (const c of CARDS) { seen[c.source] = (seen[c.source] || 0) + 1; pos[c.id] = seen[c.source] / total[c.source]; }
+    return pos;
+  })();
+  function freshOrdered(pool) {
+    return pool.filter((c) => !state.cards[c.id])
+      .sort((a, b) => newPriority(a) - newPriority(b) || (newPriority(a) === 2 ? SOURCE_POS[a.id] - SOURCE_POS[b.id] : 0));
+  }
+  // How many new cards to learn today so that every card has been seen before the review-only days.
+  function pace() {
+    const key = today();
+    const seenToday = dayStats(key).newSeen;
+    const fresh = CARDS.filter((c) => !state.cards[c.id]).length;
+    const stop = lastNewDay();
+    const reviewOnly = key > stop;
+    const daysLeft = reviewOnly ? 0 : daysBetween(key, stop) + 1;
+    const quota = reviewOnly ? 0 : Math.ceil((fresh + seenToday) / daysLeft);
+    return { fresh, seenToday, quota, daysLeft, stop, reviewOnly, newLeft: Math.max(0, Math.min(fresh, quota - seenToday)) };
+  }
+  function todayPlan() {
+    const key = today();
+    const p = pace();
+    const due = CARDS.filter((c) => isDue(c.id, key));
+    const dueUnseen = due.filter((c) => state.cards[c.id].last !== key).length;
+    const reviewed = dayStats(key).reviewed;
+    const target = Math.max(state.settings.dailyGoal, reviewed + dueUnseen + p.newLeft);
+    return { ...p, due, dueUnseen, reviewed, target };
   }
 
   function checkIn() {
@@ -63,7 +135,9 @@
   // grade: 0 = Chưa thuộc, 1 = Tạm, 2 = Thuộc
   function gradeCard(id, grade) {
     const key = today();
+    const isNew = !state.cards[id];
     const rec = state.cards[id] || { box: 0, due: key, reviews: 0, lapses: 0 };
+    const firstToday = rec.last !== key;
     if (grade === 0) {
       rec.box = 0;
       rec.lapses += 1;
@@ -71,17 +145,25 @@
     } else if (grade === 1) {
       rec.box = Math.max(1, rec.box);
       rec.due = addDays(key, 1);
-    } else {
+    } else if (firstToday || rec.lastGrade !== 2) {
+      // A second "Thuộc" on the same day (e.g. in random mode) does not move the card up again.
       rec.box = Math.min(rec.box + 1, INTERVALS.length - 1);
       rec.due = addDays(key, INTERVALS[rec.box]);
     }
     rec.reviews += 1;
     rec.last = key;
+    rec.lastGrade = grade;
     state.cards[id] = rec;
     const day = dayRecord(key);
     day.checkedIn = true;
-    day.reviewed += 1;
-    if (grade === 2) day.good += 1;
+    // Count each card once per day, even when "Chưa thuộc" repeats it in the same session.
+    if (firstToday) {
+      const mine = day.dev[DEVICE];
+      mine.reviewed += 1;
+      if (grade === 2) mine.good += 1;
+      if (isNew) mine.newSeen += 1;
+      normalizeDay(day);
+    }
     save();
   }
 
@@ -178,6 +260,15 @@
   }
   function stemsOf(text) {
     return new Set((text.match(WORD) || []).filter(isKeyword).map(stem));
+  }
+
+  // Coverage percentage without touching the page, for the mock exam history.
+  function coveragePct(card, text) {
+    if (!text.trim()) return 0;
+    const mine = stemsOf(text);
+    const given = stemsOf(card.question);
+    const wanted = [...stemsOf(el("div", {}, markdown(card.answer)).textContent)].filter((s) => !given.has(s));
+    return wanted.length ? Math.round((wanted.filter((s) => mine.has(s)).length / wanted.length) * 100) : 0;
   }
 
   // Highlights keywords inside the rendered model answer and returns the coverage numbers.
@@ -359,34 +450,42 @@
     $("#streak-best").textContent = `Kỷ lục: ${s.best} ngày`;
 
     const c = counts(CARDS);
-    $("#mastered-pct").textContent = `${Math.round((c.mastered / c.total) * 100)}%`;
+    $("#mastered-pct").textContent = c.total ? `${Math.round((c.mastered / c.total) * 100)}%` : "–";
     $("#mastered-count").textContent = `${c.mastered} / ${c.total} thẻ · ${c.learning} đang học`;
 
-    const day = state.days[key] || { checkedIn: false, reviewed: 0, good: 0 };
-    document.querySelectorAll(".goal-n").forEach((n) => (n.textContent = dailyGoal));
+    const day = dayStats(key);
+    const plan = todayPlan();
+    document.querySelectorAll(".goal-n").forEach((n) => (n.textContent = plan.target));
     $("#checkin-title").textContent = day.checkedIn
-      ? (day.reviewed >= dailyGoal ? "Xong mục tiêu hôm nay 🎉" : "Đã điểm danh hôm nay ✓")
+      ? (day.reviewed >= plan.target ? "Xong mục tiêu hôm nay 🎉" : "Đã điểm danh hôm nay ✓")
       : "Bạn chưa điểm danh hôm nay";
     $("#btn-checkin").disabled = day.checkedIn;
     $("#btn-checkin").textContent = day.checkedIn ? "✓ Đã điểm danh" : "✓ Điểm danh";
-    $("#goal-fill").style.width = `${Math.min(100, (day.reviewed / dailyGoal) * 100)}%`;
-    $("#goal-text").textContent = `Hôm nay: ${day.reviewed} / ${dailyGoal} thẻ · ${day.good} thẻ "Thuộc"`;
+    $("#goal-fill").style.width = `${Math.min(100, (day.reviewed / plan.target) * 100)}%`;
+    $("#goal-text").textContent = `Hôm nay: ${day.reviewed} / ${plan.target} thẻ (${day.newSeen} thẻ mới) · ${day.good} thẻ "Thuộc"`;
 
     renderHeatmap();
 
-    const due = CARDS.filter((x) => isDue(x.id, key)).length;
-    const fresh = CARDS.filter((x) => !state.cards[x.id]).length;
-    const freshStar = CARDS.filter((x) => !state.cards[x.id] && x.star).length;
+    const fmt = (k) => k.split("-").reverse().slice(0, 2).join("/");
+    const paceLine = plan.reviewOnly
+      ? `<li>Đang trong ${REVIEW_ONLY_DAYS} ngày cuối: chỉ ôn lại, không thêm thẻ mới${plan.fresh ? ` (còn ${plan.fresh} thẻ chưa học, học ở Luyện tập › Chỉ câu mới nếu còn sức)` : ""}.</li>`
+      : `<li>Thẻ mới hôm nay: <b>${plan.seenToday} / ${plan.quota}</b>${plan.newLeft ? ` · còn ${plan.newLeft}` : " ✓"}</li>
+         <li class="muted small">Để học hết ${plan.fresh + plan.seenToday} thẻ chưa học trước ${fmt(plan.stop)} (còn ${plan.daysLeft} ngày học thẻ mới) cần khoảng ${plan.quota} thẻ mới/ngày. Bỏ một ngày thì các ngày sau tự tăng lên.</li>`;
     $("#queue-summary").innerHTML = `
-      <li><b>${due}</b> thẻ đến hạn ôn lại</li>
-      <li><b>${fresh}</b> thẻ chưa học (${freshStar} thẻ ⭐)</li>
-      <li>Buổi ôn hôm nay: thẻ đến hạn trước, sau đó thẻ mới (ưu tiên ⭐), tối đa ${dailyGoal} thẻ.</li>`;
+      <li><b>${plan.dueUnseen}</b> thẻ đến hạn ôn lại</li>
+      ${paceLine}
+      <li class="muted small">Thứ tự thẻ mới: câu từ các buổi phỏng vấn thật (Section 12), rồi ⭐, rồi các phần còn lại xen kẽ. Lần ôn nào rơi sau ngày thi được dời vào ${REVIEW_ONLY_DAYS} ngày cuối (${fmt(addDays(examDate, -REVIEW_ONLY_DAYS))}–${fmt(addDays(examDate, -1))}) để thẻ nào cũng được ôn lại trước khi thi.</li>`;
 
     const weak = Object.entries(state.cards).filter(([id, r]) => r.lapses > 0 && BY_ID[id])
       .sort((a, b) => b[1].lapses - a[1].lapses || a[1].box - b[1].box).slice(0, 5);
     $("#weak-list").innerHTML = weak.length
-      ? weak.map(([id, r]) => `<li><span class="tag">${BY_ID[id].sourceLabel} ${BY_ID[id].num}</span> ${inline(BY_ID[id].question.split("\n")[0].slice(0, 90))} <span class="muted small">· sai ${r.lapses} lần</span></li>`).join("")
+      ? weak.map(([id, r]) => `<li><button class="weak-item" data-id="${escapeHtml(id)}" title="Luyện câu này"><span class="tag">${BY_ID[id].sourceLabel} ${escapeHtml(BY_ID[id].num)}</span> ${inline(BY_ID[id].question.split("\n")[0].slice(0, 90))} <span class="muted small">· sai ${r.lapses} lần</span></button></li>`).join("")
       : '<li class="muted">Chưa có. Bấm "Chưa thuộc" khi bí, thẻ sẽ hiện ở đây.</li>';
+    $("#btn-weak-all").hidden = !weak.length;
+    document.querySelectorAll("#weak-list .weak-item").forEach((b) => b.addEventListener("click", () => {
+      showView("practice");
+      startPractice([BY_ID[b.dataset.id]]);
+    }));
   }
 
   function renderHeatmap() {
@@ -430,6 +529,7 @@
     }
     $("#s-exam").value = state.settings.examDate;
     $("#s-goal").value = state.settings.dailyGoal;
+    $("#mock-history").innerHTML = mockHistoryHtml(30) || '<div class="panel"><h3>Lịch sử thi thử</h3><p class="muted">Chưa có lần thi thử nào. Kết quả được lưu khi bạn làm xong phần nói.</p></div>';
   }
   function bar(c) {
     const pct = (n) => (c.total ? (n / c.total) * 100 : 0);
@@ -455,15 +555,22 @@
     const key = today();
     let pool = CARDS.filter((c) => (source === "all" || c.source === source) && (section === "all" || c.section === section) && (!starOnly || c.star));
     if (mode === "random") return shuffle(pool).slice(0, limit);
-    if (mode === "new") return pool.filter((c) => !state.cards[c.id]).slice(0, limit);
+    if (mode === "new") return freshOrdered(pool).slice(0, limit);
     if (mode === "weak") {
       return pool.filter((c) => state.cards[c.id] && state.cards[c.id].lapses > 0)
         .sort((a, b) => state.cards[b.id].lapses - state.cards[a.id].lapses).slice(0, limit);
     }
-    const due = shuffle(pool.filter((c) => isDue(c.id, key))).sort((a, b) => state.cards[a.id].due.localeCompare(state.cards[b.id].due));
-    const fresh = pool.filter((c) => !state.cards[c.id]);
-    const freshOrdered = [...fresh.filter((c) => c.star), ...fresh.filter((c) => !c.star)];
-    return [...due, ...freshOrdered].slice(0, limit);
+    const due = shuffle(pool.filter((c) => isDue(c.id, key))).sort((a, b) => dueOf(a.id).localeCompare(dueOf(b.id)));
+    return [...due, ...freshOrdered(pool)].slice(0, limit);
+  }
+
+  // Today's session: everything due, today's share of new cards, topped up with more new cards
+  // if that is still below the daily minimum (not during the review-only days).
+  function todayQueue() {
+    const plan = todayPlan();
+    const due = shuffle(plan.due).sort((a, b) => dueOf(a.id).localeCompare(dueOf(b.id)));
+    const topUp = plan.reviewOnly ? 0 : Math.max(0, state.settings.dailyGoal - plan.reviewed - plan.dueUnseen - plan.newLeft);
+    return [...due, ...freshOrdered(CARDS).slice(0, plan.newLeft + topUp)];
   }
 
   function startPractice(queue) {
@@ -553,7 +660,8 @@
         </ol>
         <p class="muted small">Câu hỏi lấy ngẫu nhiên, ưu tiên câu ⭐ và câu từ các bài review thật (Section 12).</p>
         <button class="btn btn-primary" id="btn-mock-start">Bắt đầu thi thử</button>
-      </div>`;
+      </div>
+      ${mockHistoryHtml(5)}`;
     $("#btn-mock-start").addEventListener("click", startMock);
   }
 
@@ -652,6 +760,9 @@
       const c = mock.written[Number(b.closest("[data-wi]").dataset.wi)];
       gradeCard(c.id, Number(b.dataset.g));
       mock.graded[c.id] = Number(b.dataset.g);
+      const saved = state.mocks.find((m) => m.id === mock.recordId);
+      const entry = saved && saved.written.find((w) => w.id === c.id);
+      if (entry) { entry.grade = Number(b.dataset.g); save(); }
       renderMock();
     }));
     $("#btn-mock-again").addEventListener("click", startMock);
@@ -663,8 +774,55 @@
     mock.graded[c.id] = g;
     mock.oralIndex += 1;
     mock.revealed = false;
-    if (mock.oralIndex >= mock.oral.length) mock.phase = "review";
+    if (mock.oralIndex >= mock.oral.length) {
+      mock.phase = "review";
+      recordMock();
+    }
     renderMock();
+  }
+
+  // ---------- mock exam history ----------
+  function recordMock() {
+    const record = {
+      id: `${Date.now().toString(36)}-${DEVICE}`,
+      date: today(),
+      oral: mock.oral.map((c) => ({ id: c.id, grade: mock.graded[c.id] })),
+      written: mock.written.map((c, i) => ({ id: c.id, coverage: coveragePct(c, mock.answers[i]), blank: !mock.answers[i].trim() })),
+    };
+    state.mocks = [...(state.mocks || []), record];
+    mock.recordId = record.id;
+    save();
+  }
+  function mockSummary(m) {
+    const oralGood = m.oral.filter((o) => o.grade === 2).length;
+    const cov = Math.round(m.written.reduce((s, w) => s + w.coverage, 0) / m.written.length);
+    const graded = m.written.filter((w) => w.grade !== undefined);
+    const self = graded.length
+      ? [2, 1, 0].map((g) => [g, graded.filter((w) => w.grade === g).length]).filter(([, n]) => n)
+        .map(([g, n]) => `<b class="g${g}">${n}</b> ${["chưa đạt", "tạm", "tốt"][g]}`).join(" · ")
+      : '<span class="muted">chưa chấm</span>';
+    return { oralGood, oralTotal: m.oral.length, cov, self };
+  }
+  function mockHistoryHtml(limit) {
+    const list = (state.mocks || []).slice().sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+    if (!list.length) return "";
+    const rows = list.slice(0, limit).map((m) => {
+      const s = mockSummary(m);
+      const level = (pct, hi, lo) => (pct >= hi ? "g2" : pct >= lo ? "g1" : "g0");
+      return `<tr><td>${m.date.split("-").reverse().join("/")}</td>
+        <td><b class="${level(s.oralGood / s.oralTotal, 0.67, 0.34)}">${s.oralGood}/${s.oralTotal}</b></td>
+        <td><b class="${level(s.cov, 35, 18)}">${s.cov}%</b></td><td>${s.self}</td></tr>`;
+    }).join("");
+    let trend = "";
+    if (list.length >= 2) {
+      const avg = (ms) => ms.reduce((t, m) => t + mockSummary(m).oralGood / m.oral.length, 0) / ms.length;
+      const n = Math.min(3, Math.floor(list.length / 2));
+      const diff = Math.round((avg(list.slice(0, n)) - avg(list.slice(n, 2 * n))) * 100);
+      trend = `<p class="muted small">Phần nói, ${n} lần gần nhất so với ${n} lần trước đó: ${diff > 0 ? `tăng ${diff}` : diff < 0 ? `giảm ${-diff}` : "không đổi"} điểm phần trăm câu "Thuộc".</p>`;
+    }
+    return `<div class="panel"><h3>Lịch sử thi thử (${list.length} lần)</h3>
+      <div class="table-wrap"><table class="mock-history"><thead><tr><th>Ngày</th><th>Nói: câu "Thuộc"</th><th>Viết: độ phủ ý TB</th><th>Viết: tự chấm</th></tr></thead><tbody>${rows}</tbody></table></div>
+      ${trend}<p class="muted small">Độ phủ ý là so từ khóa với đáp án mẫu; khoảng 35% đã là đủ ý chính.</p></div>`;
   }
 
   // ---------- events ----------
@@ -673,7 +831,12 @@
   $("#btn-start-today").addEventListener("click", () => {
     showView("practice");
     $("#f-source").value = "all"; fillSections(); $("#f-mode").value = "due"; $("#f-star").checked = false;
-    startPractice(buildQueue({ mode: "due", limit: Math.max(state.settings.dailyGoal - (state.days[today()] || { reviewed: 0 }).reviewed, 5) }));
+    startPractice(todayQueue());
+  });
+  $("#btn-weak-all").addEventListener("click", () => {
+    showView("practice");
+    $("#f-source").value = "all"; fillSections(); $("#f-mode").value = "weak"; $("#f-star").checked = false;
+    startPractice();
   });
   $("#f-source").addEventListener("change", fillSections);
   const THEMES = { auto: "🌓 Tự động", light: "☀️ Sáng", dark: "🌙 Tối" };
@@ -723,17 +886,53 @@
     a.click();
     URL.revokeObjectURL(a.href);
   });
+  // Merges another device's backup into this one. Safe to repeat: importing the same file twice changes nothing.
+  function mergeBackup(data) {
+    const result = { cards: 0, days: 0, mocks: 0 };
+    for (const [id, theirs] of Object.entries(data.cards)) {
+      const mine = state.cards[id];
+      if (!mine) { state.cards[id] = theirs; result.cards += 1; continue; }
+      const newer = (theirs.last || "") > (mine.last || "") || (theirs.last === mine.last && theirs.reviews > mine.reviews);
+      const pick = newer ? { ...theirs } : mine;
+      pick.reviews = Math.max(mine.reviews || 0, theirs.reviews || 0);
+      pick.lapses = Math.max(mine.lapses || 0, theirs.lapses || 0);
+      state.cards[id] = pick;
+      if (newer) result.cards += 1;
+    }
+    for (const [key, theirsRaw] of Object.entries(data.days)) {
+      const theirs = normalizeDay({ ...theirsRaw });
+      if (!state.days[key]) result.days += 1;
+      const day = state.days[key] ? normalizeDay(state.days[key]) : { checkedIn: false, dev: {} };
+      // Counts per device only grow, so the larger value is the latest one.
+      for (const [dev, counts] of Object.entries(theirs.dev)) {
+        const mine = day.dev[dev] || {};
+        day.dev[dev] = Object.fromEntries(DAY_FIELDS.map((f) => [f, Math.max(mine[f] || 0, counts[f] || 0)]));
+      }
+      day.checkedIn = day.checkedIn || Boolean(theirs.checkedIn);
+      state.days[key] = normalizeDay(day);
+    }
+    // The same mock can arrive again with more written answers self-graded; keep the more complete copy.
+    const gradedCount = (m) => m.written.filter((w) => w.grade !== undefined).length;
+    const mocks = new Map((state.mocks || []).map((m) => [m.id, m]));
+    for (const m of data.mocks || []) {
+      if (!mocks.has(m.id)) result.mocks += 1;
+      if (!mocks.has(m.id) || gradedCount(m) > gradedCount(mocks.get(m.id))) mocks.set(m.id, m);
+    }
+    state.mocks = [...mocks.values()];
+    return result;
+  }
+
   $("#file-import").addEventListener("change", async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     try {
       const data = JSON.parse(await file.text());
       if (!data.cards || !data.days) throw new Error("not a backup");
-      if (!confirm("Thay tiến độ hiện tại bằng file backup này?")) return;
-      state = { ...defaultState(), ...data, settings: { ...defaultState().settings, ...data.settings } };
+      if (!confirm("Gộp file backup này vào tiến độ hiện tại?\n\nMỗi thẻ giữ lần ôn mới nhất từ hai bên, lịch sử các ngày học và các lần thi thử được gộp lại. Cài đặt trên máy này giữ nguyên.")) return;
+      const r = mergeBackup(data);
       save();
       renderProgress();
-      alert("Đã nhập backup.");
+      alert(`Đã gộp backup: ${r.cards} thẻ lấy theo backup, ${r.days} ngày học, ${r.mocks} lần thi thử mới.`);
     } catch (err) {
       alert("File không hợp lệ: " + err.message);
     } finally {

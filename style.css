@@ -121,6 +121,10 @@ b.g0 { color: var(--bad); } b.g1 { color: var(--ok); } b.g2 { color: var(--good)
 
 .queue, .weak-list { margin: 0; padding-left: 20px; }
 .queue li, .weak-list li { margin-bottom: 6px; }
+.weak-item { display: block; width: calc(100% + 8px); font: inherit; color: inherit; text-align: left; background: none; border: 0; padding: 2px 4px; margin: -2px -4px; border-radius: 6px; cursor: pointer; }
+.weak-item:hover { background: var(--bg); }
+.btn.small { padding: 4px 10px; }
+.mock-history td, .mock-history th { white-space: nowrap; }
 .tag { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--heat0); margin-right: 4px; white-space: nowrap; }
 .tag.star { background: #fbefc8; color: #6d5200; }
 

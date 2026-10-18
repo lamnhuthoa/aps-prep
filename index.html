@@ -60,7 +60,7 @@
       <div class="panel checkin-panel">
         <div>
           <h2 id="checkin-title">Bạn chưa điểm danh hôm nay</h2>
-          <p class="muted" id="checkin-sub">Điểm danh rồi ôn ít nhất <span class="goal-n"></span> thẻ để giữ chuỗi.</p>
+          <p class="muted" id="checkin-sub">Mục tiêu hôm nay: <span class="goal-n"></span> thẻ, gồm thẻ đến hạn và thẻ mới theo nhịp tới ngày thi.</p>
           <div class="goal-bar"><div class="goal-fill" id="goal-fill"></div></div>
           <p class="muted small" id="goal-text"></p>
         </div>
@@ -84,7 +84,10 @@
           <ul class="queue" id="queue-summary"></ul>
         </div>
         <div class="panel">
-          <h3>Câu hay sai nhất</h3>
+          <div class="panel-head">
+            <h3>Câu hay sai nhất</h3>
+            <button class="btn btn-ghost small" id="btn-weak-all" hidden>Luyện tất cả câu hay sai</button>
+          </div>
           <ol class="weak-list" id="weak-list"></ol>
         </div>
       </div>
@@ -127,13 +130,15 @@
         </div>
         <div id="progress-list"></div>
       </div>
+      <div id="mock-history"></div>
       <div class="panel settings">
         <h3>Cài đặt và sao lưu</h3>
         <div class="settings-row">
           <label>Ngày thi <input type="date" id="s-exam"></label>
-          <label>Mục tiêu mỗi ngày <input type="number" id="s-goal" min="5" max="200" step="5"></label>
+          <label>Số thẻ tối thiểu mỗi ngày <input type="number" id="s-goal" min="5" max="200" step="5"></label>
         </div>
-        <p class="muted small">Tiến độ chỉ lưu trong trình duyệt này. Xuất file backup thường xuyên, nhất là trước khi xóa lịch sử trình duyệt hoặc đổi máy.</p>
+        <p class="muted small">Mục tiêu mỗi ngày là số thẻ đến hạn cộng số thẻ mới cần học để kịp ngày thi, và không thấp hơn số tối thiểu này.</p>
+        <p class="muted small">Tiến độ chỉ lưu trong trình duyệt này. Xuất file backup thường xuyên, nhất là trước khi xóa lịch sử trình duyệt hoặc đổi máy. Nhập backup sẽ <b>gộp</b> với tiến độ hiện có, nên có thể xuất ở điện thoại rồi nhập vào laptop và ngược lại. Muốn thay hẳn bằng backup thì xóa tiến độ trước rồi nhập.</p>
         <div class="settings-row">
           <button class="btn btn-ghost" id="btn-export">⬇ Xuất backup</button>
           <label class="btn btn-ghost file-btn">⬆ Nhập backup<input type="file" id="file-import" accept="application/json"></label>
