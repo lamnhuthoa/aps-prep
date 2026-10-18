@@ -583,6 +583,7 @@
   }
 
   function renderCard() {
+    stopDictation();
     const area = $("#practice-area");
     if (!session) { area.innerHTML = '<div class="panel empty">Chọn bộ lọc rồi bấm <b>Bắt đầu</b>.</div>'; return; }
     if (session.index >= session.queue.length && session.again.length) {
@@ -600,14 +601,30 @@
     const card = session.queue[session.index];
     const rec = state.cards[card.id];
     const statusText = rec ? `hộp ${rec.box} · đã ôn ${rec.reviews} lần` : "thẻ mới";
+    // With a draft, the revealed answer is shown side by side with it, as in the mock exam review.
+    const compare = session.revealed && (session.draft || "").trim();
+    const draftHtml = `
+        <details class="draft"${session.draft ? " open" : ""}><summary>Viết nháp câu trả lời (luyện phần thi viết, có so với đáp án)</summary>
+          <textarea placeholder="Gõ hoặc bấm 🎤 để đọc câu trả lời, rồi bấm Kiểm tra…">${escapeHtml(session.draft || "")}</textarea>
+          ${session.revealed ? "" : `<div class="draft-tools">
+            ${SpeechRec ? '<button class="btn btn-ghost small" id="btn-dictate">🎤 Đọc để nhập</button>' : ""}
+            <button class="btn btn-ghost small" id="btn-check">Kiểm tra bài viết</button>
+            <span class="muted small" id="dictate-status"></span>
+          </div>
+          ${SpeechRec ? '<p class="muted small">🎤 dùng nhận dạng giọng nói của trình duyệt, tiếng Anh, cần internet. Chrome gửi âm thanh lên máy chủ Google, Safari gửi lên Apple.</p>' : ""}`}
+        </details>`;
     area.innerHTML = `
       <div class="session-bar"><span>${session.index + 1} / ${session.queue.length}</span><div class="goal-bar"><div class="goal-fill" style="width:${(session.index / session.queue.length) * 100}%"></div></div></div>
       <article class="panel card">
         <div class="card-meta"><span class="tag">${card.sourceLabel} ${escapeHtml(card.num)}</span>${card.star ? '<span class="tag star">⭐</span>' : ""}<span class="muted small">${escapeHtml(card.section)}${card.subsection ? " · " + escapeHtml(card.subsection) : ""}</span><span class="muted small right">${statusText}</span></div>
         ${questionHtml(card)}
         ${glossaryHtml(card, session.revealed)}
-        <details class="draft"${session.draft ? " open" : ""}><summary>Viết nháp câu trả lời (luyện phần thi viết, có so với đáp án)</summary><textarea placeholder="Gõ câu trả lời của bạn trước khi xem đáp án…">${escapeHtml(session.draft || "")}</textarea></details>
-        ${answerHtml(card, !session.revealed)}
+        ${compare
+          ? `<div class="compare">
+              <div><h4>Bài của bạn</h4><div class="mine">${escapeHtml(session.draft).replace(/\n/g, "<br>")}</div></div>
+              <div><h4>Đáp án mẫu</h4>${answerHtml(card, false)}</div>
+            </div>`
+          : `${draftHtml}${answerHtml(card, !session.revealed)}`}
         <div class="feedback"></div>
         <div class="card-actions">
           ${session.revealed
@@ -622,10 +639,66 @@
     } else {
       $("#btn-reveal").addEventListener("click", reveal);
       $("#btn-skip").addEventListener("click", () => { session.index += 1; session.draft = ""; renderCard(); });
+      const textarea = area.querySelector("details.draft textarea");
+      const status = $("#dictate-status");
+      $("#btn-check").addEventListener("click", () => {
+        if (!textarea.value.trim()) { status.textContent = "Viết hoặc đọc câu trả lời trước đã."; textarea.focus(); return; }
+        reveal();
+      });
+      const dictate = $("#btn-dictate");
+      if (dictate) dictate.addEventListener("click", () => (dictation ? stopDictation() : startDictation(textarea, dictate, status)));
     }
   }
+
+  // ---------- speech to text for the draft (Web Speech API; Chrome, Edge and Safari) ----------
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let dictation = null;
+  const DICTATION_ERRORS = {
+    "not-allowed": "Trình duyệt chặn micro. Cho phép micro cho trang này rồi thử lại.",
+    "service-not-allowed": "Trình duyệt chặn nhận dạng giọng nói trên trang này.",
+    "no-speech": "Không nghe thấy gì. Bấm 🎤 để thử lại.",
+    "audio-capture": "Không tìm thấy micro.",
+    network: "Lỗi mạng: nhận dạng giọng nói cần internet.",
+  };
+  function stopDictation() {
+    if (!dictation) return;
+    dictation.stop();
+  }
+  function startDictation(textarea, btn, status) {
+    const recognizer = new SpeechRec();
+    recognizer.lang = "en-US";
+    recognizer.continuous = true;
+    recognizer.interimResults = true;
+    // Finished phrases go into the draft; the phrase still being spoken is shown below it.
+    recognizer.onresult = (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const text = e.results[i][0].transcript.trim();
+        if (!e.results[i].isFinal) { interim += " " + text; continue; }
+        if (!text) continue;
+        const sep = textarea.value && !/\s$/.test(textarea.value) ? " " : "";
+        textarea.value += sep + text.charAt(0).toUpperCase() + text.slice(1) + (/[.?!]$/.test(text) ? "" : ".");
+      }
+      status.textContent = interim ? `…${interim}` : "Đang nghe (tiếng Anh)…";
+    };
+    recognizer.onerror = (e) => { status.textContent = DICTATION_ERRORS[e.error] || `Lỗi nhận dạng giọng nói: ${e.error}`; };
+    recognizer.onend = () => {
+      if (dictation === recognizer) dictation = null;
+      if (!btn.isConnected) return;
+      btn.textContent = "🎤 Đọc để nhập";
+      btn.classList.remove("recording");
+      if (status.textContent.startsWith("…") || status.textContent.startsWith("Đang nghe")) status.textContent = "";
+    };
+    dictation = recognizer;
+    recognizer.start();
+    btn.textContent = "⏹ Dừng";
+    btn.classList.add("recording");
+    status.textContent = "Đang nghe (tiếng Anh)…";
+  }
+
   function reveal() {
     if (!session || session.revealed) return;
+    stopDictation();
     const draft = document.querySelector("#practice-area textarea");
     session.draft = draft ? draft.value : "";
     session.revealed = true;
