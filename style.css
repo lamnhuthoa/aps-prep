@@ -51,7 +51,7 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; line-height: 1.55; }
+body { margin: 0; line-height: 1.55; overflow-wrap: break-word; }
 main { max-width: 960px; margin: 0 auto; padding: 16px; }
 h2, h3, h4 { margin: 0 0 8px; line-height: 1.3; }
 h2 { font-size: 1.25rem; }
@@ -162,6 +162,8 @@ th, td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; vert
 .draft p.small { margin: 6px 0 0; }
 .btn.recording { border-color: var(--bad); color: var(--bad); }
 textarea { width: 100%; min-height: 110px; margin-top: 8px; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; resize: vertical; }
+/* iOS Safari zooms in on fields under 16px when they are tapped and leaves the page zoomed, so it scrolls sideways. */
+@media (pointer: coarse) { select, input, textarea, input[type="date"], input[type="number"] { font-size: 16px; } }
 .empty { text-align: center; padding: 32px 16px; }
 
 /* mock */
@@ -270,6 +272,7 @@ body.reel-open { overflow: hidden; }
 .reel-hint { color: var(--muted); font-size: 0.9rem; margin: 12px 0 0; }
 .points { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
 .point { display: flex; gap: 10px; align-items: flex-start; text-align: left; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.point > div { min-width: 0; flex: 1; }
 .point > div > :first-child { margin-top: 0; } .point > div > :last-child { margin-bottom: 0; }
 .point-hidden { border-style: dashed; background: none; color: var(--muted); cursor: pointer; }
 .point-n { flex-shrink: 0; display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 999px; background: var(--heat0); color: var(--ink); font-size: 0.75rem; font-weight: 700; margin-top: 1px; }
