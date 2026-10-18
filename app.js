@@ -13,6 +13,35 @@
   const REVIEW_ONLY_DAYS = 3;
   const DEVICE_KEY = "aps-prep-device";
 
+  // ---------- icons: Lucide (https://lucide.dev, ISC licence), inlined so the app works offline ----------
+  const ICONS = {
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    "circle-check": '<circle cx="12" cy="12" r="10"/><path d="m16 9-5.5 5.5L8 12"/>',
+    "clipboard-copy": '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M16 4h2a2 2 0 0 1 2 2v4"/><path d="M21 14H11"/><path d="m15 10-4 4 4 4"/>',
+    "party-popper": '<path d="M5.8 11.3 2 22l10.7-3.79"/><path d="M4 3h.01"/><path d="M22 8h.01"/><path d="M15 2h.01"/><path d="M22 20h.01"/><path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"/><path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11c-.11.7-.72 1.22-1.43 1.22H17"/><path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98C9.52 4.9 9 5.52 9 6.23V7"/><path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z"/>',
+    mic: '<path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/>',
+    square: '<rect width="18" height="18" x="3" y="3" rx="2"/>',
+    star: '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>',
+    "arrow-right": '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+    "sun-moon": '<path d="M12 2v2"/><path d="M14.837 16.385a6 6 0 1 1-7.223-7.222c.624-.147.97.66.715 1.248a4 4 0 0 0 5.26 5.259c.589-.255 1.396.09 1.248.715"/><path d="M16 12a4 4 0 0 0-4-4"/><path d="m19 5-1.256 1.256"/><path d="M20 12h2"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+    moon: '<path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/>',
+    download: '<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>',
+    upload: '<path d="M12 3v12"/><path d="m17 8-5-5-5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>',
+    reels: '<path d="M7 2h10"/><path d="M5 6h14"/><rect width="18" height="12" x="3" y="10" rx="2"/>',
+    "chevron-left": '<path d="m15 18-6-6 6-6"/>',
+    "chevron-right": '<path d="m9 18 6-6-6-6"/>',
+    "chevron-up": '<path d="m18 15-6-6-6 6"/>',
+    minus: '<path d="M5 12h14"/>',
+    plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+    eye: '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
+  };
+  function icon(name, cls = "") {
+    return `<svg class="icon${cls ? " " + cls : ""}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
+  }
+  const STAR = icon("star", "icon-star");
+
   // ---------- dates ----------
   function dateKey(d) {
     const pad = (n) => String(n).padStart(2, "0");
@@ -351,13 +380,13 @@
     box.innerHTML = `
       <div class="fb-head"><b>So với đáp án mẫu</b><span class="fb-score ${level}">${pct}%</span><span class="${level}">${verdict}</span><span class="muted small">${hit}/${total} từ khóa</span></div>
       <div class="goal-bar"><div class="goal-fill ${level}" style="width:${pct}%"></div></div>
-      ${points.length >= 2 ? `<ul class="fb-points">${points.map((p) => `<li class="${p.ok ? "ok" : "missing"}">${p.ok ? "✓" : "✗"} ${inline(p.point)}</li>`).join("")}</ul>` : ""}
+      ${points.length >= 2 ? `<ul class="fb-points">${points.map((p) => `<li class="${p.ok ? "ok" : "missing"}">${icon(p.ok ? "check" : "x")} ${inline(p.point)}</li>`).join("")}</ul>` : ""}
       <p class="muted small">Trong đáp án mẫu: <mark class="hit">xanh</mark> = bạn đã viết, <mark class="miss">đỏ</mark> = còn thiếu. Đáp án mẫu là bài nói dài, nên bài viết 5 phút đạt khoảng 35% đã là đủ ý chính. Đây chỉ là so từ khóa: viết đúng ý bằng từ khác vẫn bị tính thiếu, và có đủ từ khóa chưa chắc đã giải thích đúng.</p>
-      <button class="btn btn-ghost btn-copy">📋 Copy để nhờ AI chấm kỹ</button>`;
+      <button class="btn btn-ghost btn-copy">${icon("clipboard-copy")} Copy để nhờ AI chấm kỹ</button>`;
     const btn = box.querySelector(".btn-copy");
     btn.addEventListener("click", async () => {
       await copyText(aiPrompt(card, text));
-      btn.textContent = "✓ Đã copy. Dán vào Claude.ai (hoặc Claude Code) để được chấm";
+      btn.innerHTML = `${icon("check")} Đã copy. Dán vào Claude.ai (hoặc Claude Code) để được chấm`;
     });
   }
 
@@ -456,11 +485,11 @@
     const day = dayStats(key);
     const plan = todayPlan();
     document.querySelectorAll(".goal-n").forEach((n) => (n.textContent = plan.target));
-    $("#checkin-title").textContent = day.checkedIn
-      ? (day.reviewed >= plan.target ? "Xong mục tiêu hôm nay 🎉" : "Đã điểm danh hôm nay ✓")
+    $("#checkin-title").innerHTML = day.checkedIn
+      ? (day.reviewed >= plan.target ? `Xong mục tiêu hôm nay ${icon("party-popper")}` : `Đã điểm danh hôm nay ${icon("circle-check")}`)
       : "Bạn chưa điểm danh hôm nay";
     $("#btn-checkin").disabled = day.checkedIn;
-    $("#btn-checkin").textContent = day.checkedIn ? "✓ Đã điểm danh" : "✓ Điểm danh";
+    $("#btn-checkin").innerHTML = `${icon("check")} ${day.checkedIn ? "Đã điểm danh" : "Điểm danh"}`;
     $("#goal-fill").style.width = `${Math.min(100, (day.reviewed / plan.target) * 100)}%`;
     $("#goal-text").textContent = `Hôm nay: ${day.reviewed} / ${plan.target} thẻ (${day.newSeen} thẻ mới) · ${day.good} thẻ "Thuộc"`;
 
@@ -469,12 +498,12 @@
     const fmt = (k) => k.split("-").reverse().slice(0, 2).join("/");
     const paceLine = plan.reviewOnly
       ? `<li>Đang trong ${REVIEW_ONLY_DAYS} ngày cuối: chỉ ôn lại, không thêm thẻ mới${plan.fresh ? ` (còn ${plan.fresh} thẻ chưa học, học ở Luyện tập › Chỉ câu mới nếu còn sức)` : ""}.</li>`
-      : `<li>Thẻ mới hôm nay: <b>${plan.seenToday} / ${plan.quota}</b>${plan.newLeft ? ` · còn ${plan.newLeft}` : " ✓"}</li>
+      : `<li>Thẻ mới hôm nay: <b>${plan.seenToday} / ${plan.quota}</b>${plan.newLeft ? ` · còn ${plan.newLeft}` : ` ${icon("check")}`}</li>
          <li class="muted small">Để học hết ${plan.fresh + plan.seenToday} thẻ chưa học trước ${fmt(plan.stop)} (còn ${plan.daysLeft} ngày học thẻ mới) cần khoảng ${plan.quota} thẻ mới/ngày. Bỏ một ngày thì các ngày sau tự tăng lên.</li>`;
     $("#queue-summary").innerHTML = `
       <li><b>${plan.dueUnseen}</b> thẻ đến hạn ôn lại</li>
       ${paceLine}
-      <li class="muted small">Thứ tự thẻ mới: câu từ các buổi phỏng vấn thật (Section 12), rồi ⭐, rồi các phần còn lại xen kẽ. Lần ôn nào rơi sau ngày thi được dời vào ${REVIEW_ONLY_DAYS} ngày cuối (${fmt(addDays(examDate, -REVIEW_ONLY_DAYS))}–${fmt(addDays(examDate, -1))}) để thẻ nào cũng được ôn lại trước khi thi.</li>`;
+      <li class="muted small">Thứ tự thẻ mới: câu từ các buổi phỏng vấn thật (Section 12), rồi câu ${STAR}, rồi các phần còn lại xen kẽ. Lần ôn nào rơi sau ngày thi được dời vào ${REVIEW_ONLY_DAYS} ngày cuối (${fmt(addDays(examDate, -REVIEW_ONLY_DAYS))}–${fmt(addDays(examDate, -1))}) để thẻ nào cũng được ôn lại trước khi thi.</li>`;
 
     const weak = Object.entries(state.cards).filter(([id, r]) => r.lapses > 0 && BY_ID[id])
       .sort((a, b) => b[1].lapses - a[1].lapses || a[1].box - b[1].box).slice(0, 5);
@@ -592,7 +621,7 @@
     if (session.index >= session.queue.length) {
       const [a, h, g] = session.tally;
       area.innerHTML = session.done
-        ? `<div class="panel empty"><h2>Xong buổi ôn 🎉</h2><p>${session.done} lượt: <b class="g2">${g}</b> thuộc · <b class="g1">${h}</b> tạm · <b class="g0">${a}</b> chưa thuộc.</p><p class="muted">Thẻ "Chưa thuộc" đã được hỏi lại trong buổi này và sẽ quay lại vào ngày mai.</p><button class="btn btn-primary" id="btn-back-today">Về trang Hôm nay</button></div>`
+        ? `<div class="panel empty"><h2>Xong buổi ôn ${icon("party-popper")}</h2><p>${session.done} lượt: <b class="g2">${g}</b> thuộc · <b class="g1">${h}</b> tạm · <b class="g0">${a}</b> chưa thuộc.</p><p class="muted">Thẻ "Chưa thuộc" đã được hỏi lại trong buổi này và sẽ quay lại vào ngày mai.</p><button class="btn btn-primary" id="btn-back-today">Về trang Hôm nay</button></div>`
         : '<div class="panel empty"><h2>Không có thẻ nào phù hợp</h2><p class="muted">Đổi bộ lọc, hoặc chọn chế độ "Ngẫu nhiên tất cả" để ôn thêm.</p></div>';
       const back = $("#btn-back-today");
       if (back) back.addEventListener("click", () => showView("today"));
@@ -601,36 +630,39 @@
     const card = session.queue[session.index];
     const rec = state.cards[card.id];
     const statusText = rec ? `hộp ${rec.box} · đã ôn ${rec.reviews} lần` : "thẻ mới";
+    // Calculation cards with options are answered as multiple choice instead of a written draft.
+    const st = card.mcq ? (session.mcq = session.mcq || newMcq(card)) : null;
+    if (st && mcqDone(st)) session.revealed = true;
     // With a draft, the revealed answer is shown side by side with it, as in the mock exam review.
-    const compare = session.revealed && (session.draft || "").trim();
+    const compare = !st && session.revealed && (session.draft || "").trim();
     const draftHtml = `
         <details class="draft"${session.draft ? " open" : ""}><summary>Viết nháp câu trả lời (luyện phần thi viết, có so với đáp án)</summary>
-          <textarea placeholder="Gõ hoặc bấm 🎤 để đọc câu trả lời, rồi bấm Kiểm tra…">${escapeHtml(session.draft || "")}</textarea>
+          <textarea placeholder="Gõ hoặc bấm Đọc để nhập, rồi bấm Kiểm tra…">${escapeHtml(session.draft || "")}</textarea>
           ${session.revealed ? "" : `<div class="draft-tools">
-            ${SpeechRec ? '<button class="btn btn-ghost small" id="btn-dictate">🎤 Đọc để nhập</button>' : ""}
+            ${SpeechRec ? `<button class="btn btn-ghost small" id="btn-dictate">${icon("mic")} Đọc để nhập</button>` : ""}
             <button class="btn btn-ghost small" id="btn-check">Kiểm tra bài viết</button>
             <span class="muted small" id="dictate-status"></span>
           </div>
-          ${SpeechRec ? '<p class="muted small">🎤 dùng nhận dạng giọng nói của trình duyệt, tiếng Anh, cần internet. Chrome gửi âm thanh lên máy chủ Google, Safari gửi lên Apple.</p>' : ""}`}
+          ${SpeechRec ? '<p class="muted small">Đọc để nhập dùng nhận dạng giọng nói của trình duyệt, tiếng Anh, cần internet. Chrome gửi âm thanh lên máy chủ Google, Safari gửi lên Apple.</p>' : ""}`}
         </details>`;
     area.innerHTML = `
       <div class="session-bar"><span>${session.index + 1} / ${session.queue.length}</span><div class="goal-bar"><div class="goal-fill" style="width:${(session.index / session.queue.length) * 100}%"></div></div></div>
       <article class="panel card">
-        <div class="card-meta"><span class="tag">${card.sourceLabel} ${escapeHtml(card.num)}</span>${card.star ? '<span class="tag star">⭐</span>' : ""}<span class="muted small">${escapeHtml(card.section)}${card.subsection ? " · " + escapeHtml(card.subsection) : ""}</span><span class="muted small right">${statusText}</span></div>
+        <div class="card-meta"><span class="tag">${card.sourceLabel} ${escapeHtml(card.num)}</span>${card.star ? `<span class="tag star">${STAR}</span>` : ""}<span class="muted small">${escapeHtml(card.section)}${card.subsection ? " · " + escapeHtml(card.subsection) : ""}</span><span class="muted small right">${statusText}</span></div>
         ${questionHtml(card)}
-        ${glossaryHtml(card, session.revealed)}
         ${compare
           ? `<div class="compare">
               <div><h4>Bài của bạn</h4><div class="mine">${escapeHtml(session.draft).replace(/\n/g, "<br>")}</div></div>
               <div><h4>Đáp án mẫu</h4>${answerHtml(card, false)}</div>
             </div>`
-          : `${draftHtml}${answerHtml(card, !session.revealed)}`}
+          : `${st ? mcqHtml(card, st, session.revealed) : draftHtml}${answerHtml(card, !session.revealed)}`}
         <div class="feedback"></div>
         <div class="card-actions">
           ${session.revealed
-            ? `<button class="btn grade g0" data-g="0">Chưa thuộc <kbd>1</kbd></button><button class="btn grade g1" data-g="1">Tạm <kbd>2</kbd></button><button class="btn grade g2" data-g="2">Thuộc <kbd>3</kbd></button>`
-            : `<button class="btn btn-primary" id="btn-reveal">Hiện đáp án <kbd>Space</kbd></button><button class="btn btn-ghost" id="btn-skip">Bỏ qua</button>`}
+            ? gradeButtons(st ? mcqSuggest(st) : null)
+            : `<button class="btn ${st ? "btn-ghost" : "btn-primary"}" id="btn-reveal">Hiện đáp án <kbd>Space</kbd></button><button class="btn btn-ghost" id="btn-skip">Bỏ qua</button>`}
         </div>
+        ${glossaryHtml(card, session.revealed)}
       </article>`;
     if (session.revealed) {
       if (session.draft && lang() === "vi") area.querySelectorAll("details.en-original").forEach((d) => (d.open = true));
@@ -638,7 +670,8 @@
       area.querySelectorAll(".grade").forEach((b) => b.addEventListener("click", () => grade(Number(b.dataset.g))));
     } else {
       $("#btn-reveal").addEventListener("click", reveal);
-      $("#btn-skip").addEventListener("click", () => { session.index += 1; session.draft = ""; renderCard(); });
+      $("#btn-skip").addEventListener("click", () => { session.index += 1; session.draft = ""; session.mcq = null; renderCard(); });
+      if (st) { bindMcq(area, card, st, renderCard); return; }
       const textarea = area.querySelector("details.draft textarea");
       const status = $("#dictate-status");
       $("#btn-check").addEventListener("click", () => {
@@ -656,7 +689,7 @@
   const DICTATION_ERRORS = {
     "not-allowed": "Trình duyệt chặn micro. Cho phép micro cho trang này rồi thử lại.",
     "service-not-allowed": "Trình duyệt chặn nhận dạng giọng nói trên trang này.",
-    "no-speech": "Không nghe thấy gì. Bấm 🎤 để thử lại.",
+    "no-speech": "Không nghe thấy gì. Bấm Đọc để nhập để thử lại.",
     "audio-capture": "Không tìm thấy micro.",
     network: "Lỗi mạng: nhận dạng giọng nói cần internet.",
   };
@@ -685,13 +718,13 @@
     recognizer.onend = () => {
       if (dictation === recognizer) dictation = null;
       if (!btn.isConnected) return;
-      btn.textContent = "🎤 Đọc để nhập";
+      btn.innerHTML = `${icon("mic")} Đọc để nhập`;
       btn.classList.remove("recording");
       if (status.textContent.startsWith("…") || status.textContent.startsWith("Đang nghe")) status.textContent = "";
     };
     dictation = recognizer;
     recognizer.start();
-    btn.textContent = "⏹ Dừng";
+    btn.innerHTML = `${icon("square")} Dừng`;
     btn.classList.add("recording");
     status.textContent = "Đang nghe (tiếng Anh)…";
   }
@@ -713,7 +746,371 @@
     session.index += 1;
     session.revealed = false;
     session.draft = "";
+    session.mcq = null;
     renderCard();
+  }
+
+  // ---------- multiple choice for calculation cards: pick the formula, then the result, step by step ----------
+  // card.mcq comes from calc_mcq.json; the first option of every list is the correct one.
+  const OPTION_KEYS = ["A", "B", "C", "D"];
+  function newMcq(card) {
+    const qs = [];
+    card.mcq.forEach((s, step) => {
+      if (s.formula) qs.push({ step, kind: "formula" });
+      qs.push({ step, kind: "result" });
+    });
+    return { qs, at: 0, wrong: qs.map(() => []), orders: qs.map((q) => shuffle(card.mcq[q.step][q.kind].map((_, i) => i))) };
+  }
+  function mcqDone(st) { return st.at >= st.qs.length; }
+  // Suggested self-grade: every pick right the first time = Thuộc; at most one miss per two picks = Tạm.
+  function mcqSuggest(st) {
+    if (!mcqDone(st)) return null;
+    const misses = st.wrong.reduce((n, w) => n + w.length, 0);
+    return misses === 0 ? 2 : misses <= st.qs.length / 2 ? 1 : 0;
+  }
+  function mcqPick(card, st, option) {
+    if (mcqDone(st)) return;
+    if (option === 0) st.at += 1;
+    else if (!st.wrong[st.at].includes(option)) st.wrong[st.at].push(option);
+  }
+  function mcqPrompt(s) {
+    if (!s.promptVi || lang() === "en") return escapeHtml(s.prompt);
+    return lang() === "vi"
+      ? `${escapeHtml(s.promptVi)} <span class="muted">· ${escapeHtml(s.prompt)}</span>`
+      : `${escapeHtml(s.prompt)} <span class="vi-text">· ${escapeHtml(s.promptVi)}</span>`;
+  }
+  // frozen: the answer was revealed before the steps were finished, so the open question is left out.
+  function mcqHtml(card, st, frozen = false) {
+    const total = card.mcq.length;
+    const parts = card.mcq.map((s, step) => {
+      const mine = st.qs.map((q, k) => k).filter((k) => st.qs[k].step === step && k <= st.at);
+      if (!mine.length) return "";
+      const rows = mine.map((k) => {
+        const q = st.qs[k];
+        const opts = s[q.kind];
+        const title = q.kind === "formula" ? "Công thức" : s.formula ? "Kết quả" : "Đáp án";
+        if (frozen && k === st.at) return "";
+        if (k < st.at) {
+          const misses = st.wrong[k].length;
+          return `<div class="mcq-done"><span class="${misses ? "g1" : "g2"}">${icon("check")}</span><span class="muted small">${title}</span> <span>${escapeHtml(opts[0])}</span>${misses ? ` <span class="muted small">(chọn sai ${misses} lần)</span>` : ""}</div>`;
+        }
+        return `<div class="mcq-q"><div class="mcq-ask">Chọn ${title.toLowerCase()} đúng</div><div class="mcq-opts">${st.orders[k].map((o, pos) => {
+          const wrong = st.wrong[k].includes(o);
+          return `<button class="mcq-opt${wrong ? " wrong" : ""}" data-o="${o}"${wrong ? " disabled" : ""}><kbd>${OPTION_KEYS[pos]}</kbd><span>${escapeHtml(opts[o])}</span>${wrong ? icon("x") : ""}</button>`;
+        }).join("")}</div></div>`;
+      }).join("");
+      return `<div class="mcq-step"><div class="mcq-prompt"><span class="tag">Bước ${step + 1}/${total}</span> ${mcqPrompt(s)}</div>${rows}</div>`;
+    }).join("");
+    const misses = st.wrong.reduce((n, w) => n + w.length, 0);
+    const right = st.wrong.filter((w, k) => k < st.at && !w.length).length;
+    const summary = mcqDone(st)
+      ? `<div class="mcq-summary">${icon("circle-check")} Đúng ngay lần đầu <b>${right}/${st.qs.length}</b> lựa chọn${misses ? `, chọn sai ${misses} lần` : ""}. Xem lời giải đầy đủ bên dưới.</div>`
+      : "";
+    return `<div class="mcq">${parts}${summary}</div>`;
+  }
+  // Wire option buttons; onChange re-renders the owner (practice card or reel).
+  function bindMcq(root, card, st, onChange) {
+    root.querySelectorAll(".mcq-opt:not([disabled])").forEach((b) => b.addEventListener("click", () => {
+      mcqPick(card, st, Number(b.dataset.o));
+      onChange();
+    }));
+  }
+  function mcqKey(card, st, key) {
+    const pos = OPTION_KEYS.indexOf(key.toUpperCase());
+    if (pos < 0 || mcqDone(st)) return false;
+    const option = st.orders[st.at][pos];
+    if (option === undefined || st.wrong[st.at].includes(option)) return true;
+    mcqPick(card, st, option);
+    return true;
+  }
+  function gradeButtons(suggest) {
+    return [["Chưa thuộc", 0], ["Tạm", 1], ["Thuộc", 2]].map(([label, g]) =>
+      `<button class="btn grade g${g}${suggest === g ? " suggested" : ""}" data-g="${g}">${label} <kbd>${g + 1}</kbd></button>`).join("") +
+      (suggest === null || suggest === undefined ? "" : '<span class="muted small">Viền đậm là mức gợi ý theo kết quả trắc nghiệm.</span>');
+  }
+
+  // ---------- reel mode: one card per screen, the answer in short points, swipe to grade ----------
+  const REEL_SIZE = 10;
+  // Share of keywords blanked out in each point, by hiding level. The default level follows the card's box,
+  // so the more often a card was answered "Thuộc", the less of the answer is shown.
+  const CLOZE = [0, 0.35, 0.6, 0.85, 1];
+  const ABBREVIATION_END = /(\b(e\.g|i\.e|vs|etc|approx|cf|incl|no|fig|U\.S)\.|\b[A-Z]\.)$/i;
+  let reel = null;
+
+  // Split an answer into points: list items, tables and the sentences of each paragraph.
+  function answerChunks(card) {
+    const blocks = [];
+    let para = [], table = [];
+    const flushPara = () => { if (para.length) { blocks.push({ text: para.join(" ") }); para = []; } };
+    const flushTable = () => { if (table.length) { blocks.push({ text: table.join("\n"), whole: true }); table = []; } };
+    for (const raw of card.answer.split("\n")) {
+      const line = raw.trimEnd();
+      if (line.startsWith("|")) { flushPara(); table.push(line); continue; }
+      flushTable();
+      if (!line.trim()) { flushPara(); continue; }
+      if (/^\s*([-•]|\d+\.)\s+/.test(line) || line.startsWith(">")) { flushPara(); blocks.push({ text: line.trim(), whole: true }); continue; }
+      if (/^\*{1,2}[A-Z][^*]{0,40}:\*{1,2}/.test(line)) flushPara();
+      para.push(line.trim());
+    }
+    flushPara(); flushTable();
+    const chunks = [];
+    for (const b of blocks) chunks.push(...(b.whole ? [b.text] : sentences(b.text)));
+    // Very short pieces ("(Also Q8.)") join the point before them.
+    return chunks.reduce((out, c) => {
+      if (out.length && c.replace(/[*_`]/g, "").length < 40 && !/^([-•]|\d+\.|\|)/.test(c)) out[out.length - 1] += " " + c;
+      else out.push(c);
+      return out;
+    }, []);
+  }
+  function sentences(text) {
+    const out = [];
+    let start = 0;
+    for (const m of text.matchAll(/[.!?]["”)]?\s+(?=["“(*]*[A-Z0-9])/g)) {
+      const end = m.index + m[0].length;
+      const piece = text.slice(start, end).trim();
+      const before = text.slice(start, m.index + 1);
+      // Do not split after an abbreviation, or inside bold, italics or brackets.
+      const open = (piece.match(/\*\*/g) || []).length % 2 || (piece.replace(/\*\*/g, "").match(/\*/g) || []).length % 2 ||
+        (piece.match(/\(/g) || []).length > (piece.match(/\)/g) || []).length;
+      if (ABBREVIATION_END.test(before) || open) continue;
+      out.push(piece);
+      start = end;
+    }
+    if (text.slice(start).trim()) out.push(text.slice(start).trim());
+    return out;
+  }
+  function hashOf(s) {
+    let h = 7;
+    for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) % 100003;
+    return h;
+  }
+  // Render one point, blanking a share of its keywords. Words from the question stay visible.
+  function clozeHtml(card, text, idx, level, given) {
+    const box = el("div", {}, markdown(text));
+    const ratio = CLOZE[level];
+    if (!ratio) return box.innerHTML;
+    const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    let n = 0;
+    for (const node of nodes) {
+      const frag = document.createDocumentFragment();
+      let last = 0;
+      for (const m of node.nodeValue.matchAll(WORD)) {
+        n += 1;
+        if (!isKeyword(m[0]) || given.has(stem(m[0]))) continue;
+        if (ratio < 1 && hashOf(`${card.id}|${idx}|${n}|${m[0]}`) % 100 >= ratio * 100) continue;
+        frag.appendChild(document.createTextNode(node.nodeValue.slice(last, m.index)));
+        frag.appendChild(el("span", { class: "blank", role: "button", tabindex: "0" })).textContent = m[0];
+        last = m.index + m[0].length;
+      }
+      if (!last) continue;
+      frag.appendChild(document.createTextNode(node.nodeValue.slice(last)));
+      node.parentNode.replaceChild(frag, node);
+    }
+    return box.innerHTML;
+  }
+
+  // queueFn returns the cards to choose from; cards finished in this reel run are skipped.
+  function openReel(queueFn) {
+    reel = { queueFn, seen: new Set(), runDone: 0, runTally: [0, 0, 0] };
+    nextReelBatch();
+    document.body.classList.add("reel-open");
+    $("#reel").hidden = false;
+  }
+  function nextReelBatch() {
+    reel.queue = reel.queueFn().filter((c) => !reel.seen.has(c.id)).slice(0, REEL_SIZE);
+    Object.assign(reel, { index: 0, again: [], tally: [0, 0, 0], done: 0 });
+    resetReelCard();
+    renderReel();
+  }
+  function resetReelCard() {
+    Object.assign(reel, { shown: 0, mcq: null, level: null });
+  }
+  function closeReel() {
+    reel = null;
+    $("#reel").hidden = true;
+    $("#reel").innerHTML = "";
+    document.body.classList.remove("reel-open");
+    if (currentView === "today") renderToday();
+  }
+  function reelCard() {
+    if (reel.index >= reel.queue.length && reel.again.length) reel.queue.push(...reel.again.splice(0));
+    return reel.queue[reel.index];
+  }
+  function reelComplete(card, chunks) {
+    return card.mcq ? mcqDone(reel.mcq) : reel.shown >= chunks.length;
+  }
+
+  function renderReel() {
+    const root = $("#reel");
+    const card = reelCard();
+    if (!card) {
+      const [a, h, g] = reel.tally;
+      const more = reel.queueFn().some((c) => !reel.seen.has(c.id));
+      root.innerHTML = `
+        <div class="reel-top"><span></span><button class="reel-icon" id="reel-close" title="Đóng (Esc)">${icon("x")}</button></div>
+        <div class="reel-end">
+          <h2>${reel.done ? `Xong ${reel.done} lượt ${icon("party-popper")}` : "Không còn thẻ nào"}</h2>
+          ${reel.done ? `<p><b class="g2">${g}</b> thuộc · <b class="g1">${h}</b> tạm · <b class="g0">${a}</b> chưa thuộc</p>` : '<p class="muted">Đổi bộ lọc ở Luyện tập, hoặc chọn chế độ "Ngẫu nhiên tất cả".</p>'}
+          ${more ? `<button class="btn btn-primary" id="reel-more">${icon("reels")} Lướt tiếp ${REEL_SIZE} thẻ</button>` : ""}
+          <button class="btn btn-ghost" id="reel-done">Xong</button>
+        </div>`;
+      $("#reel-close").addEventListener("click", closeReel);
+      $("#reel-done").addEventListener("click", closeReel);
+      if (more) $("#reel-more").addEventListener("click", nextReelBatch);
+      return;
+    }
+    const rec = state.cards[card.id];
+    if (reel.level === null) reel.level = Math.min(rec ? rec.box : 0, CLOZE.length - 1);
+    const chunks = card.mcq ? [] : answerChunks(card);
+    if (card.mcq && !reel.mcq) reel.mcq = newMcq(card);
+    const complete = reelComplete(card, chunks);
+    const given = stemsOf(card.question);
+    const points = chunks.map((c, i) => i < reel.shown
+      ? `<div class="point"><span class="point-n">${i + 1}</span><div>${clozeHtml(card, c, i, reel.level, given)}</div></div>`
+      : `<button class="point point-hidden" data-i="${i}"><span class="point-n">${i + 1}</span><span>Ý ${i + 1}</span></button>`).join("");
+    const viAnswer = hasVi(card) && lang() !== "en" ? `<details class="reel-full"><summary>Bản tiếng Việt</summary><div class="card-vi">${markdown(card.vi.answer)}</div></details>` : "";
+    const hint = card.mcq
+      ? "Chọn công thức, rồi chọn kết quả cho từng bước."
+      : reel.shown === 0
+        ? `Câu trả lời có <b>${chunks.length} ý</b>. Nói to ý 1, rồi chạm để kiểm tra.`
+        : complete ? "" : `Nói to ý ${reel.shown + 1}, rồi chạm để kiểm tra.`;
+    const total = reel.queue.length;
+    root.innerHTML = `
+      <div class="reel-top">
+        <button class="reel-icon" id="reel-close" title="Đóng (Esc)">${icon("x")}</button>
+        <div class="goal-bar"><div class="goal-fill" style="width:${(reel.index / total) * 100}%"></div></div>
+        <span class="small">${reel.index + 1}/${total}</span>
+        ${card.mcq ? "" : `<div class="reel-level" title="Mức che từ khóa">
+          <button class="reel-icon" id="reel-less" ${reel.level === 0 ? "disabled" : ""} title="Che ít hơn">${icon("minus")}</button>
+          <span class="small">Che ${Math.round(CLOZE[reel.level] * 100)}%</span>
+          <button class="reel-icon" id="reel-more-hide" ${reel.level === CLOZE.length - 1 ? "disabled" : ""} title="Che nhiều hơn">${icon("plus")}</button>
+        </div>`}
+      </div>
+      <div class="reel-stage">
+        <article class="reel-card" id="reel-card">
+          <div class="card-meta"><span class="tag">${card.sourceLabel} ${escapeHtml(card.num)}</span>${card.star ? `<span class="tag star">${STAR}</span>` : ""}<span class="muted small">${rec ? `hộp ${rec.box}` : "thẻ mới"}</span></div>
+          ${questionHtml(card)}
+          ${hint ? `<p class="reel-hint">${hint}</p>` : ""}
+          ${card.mcq ? mcqHtml(card, reel.mcq) : `<div class="points">${points}</div>`}
+          ${complete && card.mcq ? answerHtml(card, false) : ""}
+          ${complete && !card.mcq ? viAnswer : ""}
+          ${glossaryHtml(card, complete)}
+        </article>
+        <div class="reel-stamp" id="reel-stamp"></div>
+      </div>
+      <div class="reel-bottom">
+        ${!complete && !card.mcq ? `<div class="reel-reveal"><button class="btn btn-primary" id="reel-next">${icon("eye")} Xem ý ${reel.shown + 1}/${chunks.length} <kbd>Space</kbd></button><button class="btn btn-ghost" id="reel-all">Hiện hết</button></div>` : ""}
+        <div class="reel-grades">
+          <button class="btn grade g0${complete && card.mcq && mcqSuggest(reel.mcq) === 0 ? " suggested" : ""}" data-g="0">${icon("chevron-left")} Chưa thuộc</button>
+          <button class="btn grade g1${complete && card.mcq && mcqSuggest(reel.mcq) === 1 ? " suggested" : ""}" data-g="1">${icon("chevron-up")} Tạm</button>
+          <button class="btn grade g2${complete && card.mcq && mcqSuggest(reel.mcq) === 2 ? " suggested" : ""}" data-g="2">Thuộc ${icon("chevron-right")}</button>
+        </div>
+        <p class="reel-legend muted">Vuốt trái: chưa thuộc · vuốt lên: tạm · vuốt phải: thuộc${card.mcq ? "" : ". Chạm ô tô màu để xem từ bị che"}.</p>
+      </div>`;
+
+    const cardEl = $("#reel-card");
+    $("#reel-close").addEventListener("click", closeReel);
+    root.querySelectorAll(".reel-grades .grade").forEach((b) => b.addEventListener("click", () => flyOut(Number(b.dataset.g))));
+    const less = $("#reel-less"), moreHide = $("#reel-more-hide");
+    if (less) less.addEventListener("click", () => { reel.level -= 1; renderReel(); });
+    if (moreHide) moreHide.addEventListener("click", () => { reel.level += 1; renderReel(); });
+    const next = $("#reel-next");
+    if (next) next.addEventListener("click", () => revealPoint(chunks.length));
+    const all = $("#reel-all");
+    if (all) all.addEventListener("click", () => { reel.shown = chunks.length; renderReel(); });
+    cardEl.querySelectorAll(".point-hidden").forEach((b) => b.addEventListener("click", () => { reel.shown = Number(b.dataset.i) + 1; renderReel(); }));
+    cardEl.querySelectorAll(".blank").forEach((b) => {
+      const show = () => b.classList.add("shown");
+      b.addEventListener("click", show);
+      b.addEventListener("keydown", (e) => { if (e.key === "Enter") show(); });
+    });
+    if (card.mcq) bindMcq(cardEl, card, reel.mcq, renderReel);
+    // Keep the newest point, or the open multiple-choice question, in view.
+    const lastPoint = cardEl.querySelectorAll(".point:not(.point-hidden)");
+    const focus = card.mcq ? cardEl.querySelector(".mcq-q") || (complete && cardEl.querySelector(".mcq-summary")) : reel.shown && lastPoint[lastPoint.length - 1];
+    if (focus && (reel.shown || (reel.mcq && reel.mcq.at))) focus.scrollIntoView({ block: "nearest" });
+    bindSwipe(cardEl);
+  }
+  function revealPoint(count) {
+    if (reel.shown < count) { reel.shown += 1; renderReel(); }
+  }
+
+  // Touch swipes: left = Chưa thuộc, right = Thuộc, up = Tạm (only once the card is scrolled to its end).
+  const SWIPE = 90;
+  function bindSwipe(cardEl) {
+    const stamp = $("#reel-stamp");
+    let s = null;
+    const atEnd = () => cardEl.scrollTop + cardEl.clientHeight >= cardEl.scrollHeight - 4;
+    const gradeOf = (dx, dy) => {
+      if (Math.abs(dx) > SWIPE && Math.abs(dx) > Math.abs(dy)) return dx > 0 ? 2 : 0;
+      if (s.end && dy < -SWIPE && Math.abs(dy) > Math.abs(dx)) return 1;
+      return null;
+    };
+    cardEl.addEventListener("touchstart", (e) => {
+      if (e.touches.length !== 1) { s = null; return; }
+      s = { x: e.touches[0].clientX, y: e.touches[0].clientY, end: atEnd() };
+    }, { passive: true });
+    cardEl.addEventListener("touchmove", (e) => {
+      if (!s) return;
+      const dx = e.touches[0].clientX - s.x, dy = e.touches[0].clientY - s.y;
+      const horizontal = Math.abs(dx) > Math.abs(dy);
+      if (!horizontal && !(s.end && dy < 0)) return;
+      cardEl.style.transition = "none";
+      cardEl.style.transform = horizontal ? `translateX(${dx}px) rotate(${dx / 25}deg)` : `translateY(${dy / 2}px)`;
+      showStamp(stamp, gradeOf(dx, dy));
+    }, { passive: true });
+    const end = (e) => {
+      if (!s) return;
+      const t = e.changedTouches[0];
+      const g = gradeOf(t.clientX - s.x, t.clientY - s.y);
+      s = null;
+      if (g !== null) { flyOut(g); return; }
+      cardEl.style.transition = "";
+      cardEl.style.transform = "";
+      showStamp(stamp, null);
+    };
+    cardEl.addEventListener("touchend", end);
+    cardEl.addEventListener("touchcancel", end);
+  }
+  function showStamp(stamp, g) {
+    stamp.className = `reel-stamp${g === null ? "" : ` on g${g}`}`;
+    stamp.textContent = g === null ? "" : ["Chưa thuộc", "Tạm", "Thuộc"][g];
+  }
+  function flyOut(g) {
+    const cardEl = $("#reel-card");
+    if (!cardEl || cardEl.classList.contains("leaving")) return;
+    showStamp($("#reel-stamp"), g);
+    cardEl.classList.add("leaving");
+    cardEl.style.transition = "";
+    cardEl.style.transform = g === 1 ? "translateY(-120%)" : `translateX(${g === 2 ? 130 : -130}%) rotate(${g === 2 ? 12 : -12}deg)`;
+    setTimeout(() => reelGrade(g), 220);
+  }
+  function reelGrade(g) {
+    if (!reel) return;
+    const card = reelCard();
+    gradeCard(card.id, g);
+    reel.tally[g] += 1;
+    reel.done += 1;
+    reel.seen.add(card.id);
+    if (g === 0) reel.again.push(card);
+    reel.index += 1;
+    resetReelCard();
+    renderReel();
+  }
+  function reelKey(e) {
+    if (e.key === "Escape") { closeReel(); return; }
+    const card = reelCard();
+    if (!card) return;
+    if (reel.mcq && /^[a-d]$/i.test(e.key) && mcqKey(card, reel.mcq, e.key)) { renderReel(); return; }
+    if (e.code === "Space" || e.key === "Enter") {
+      e.preventDefault();
+      if (!card.mcq) revealPoint(answerChunks(card).length);
+      return;
+    }
+    const g = { "1": 0, "2": 1, "3": 2, ArrowLeft: 0, ArrowUp: 1, ArrowRight: 2 }[e.key];
+    if (g !== undefined) { e.preventDefault(); flyOut(g); }
   }
 
   // ---------- mock exam (APS format: written ~15 min, then oral ~20 min) ----------
@@ -731,7 +1128,7 @@
           <li><b>Phần nói, 20 phút:</b> 1 câu giới thiệu bản thân, 1 câu về thesis, 4 câu môn học. Trả lời <i>thành tiếng</i>, rồi tự chấm từng câu.</li>
           <li>Cuối buổi so bài viết với đáp án mẫu. Mọi câu đã chấm đều được tính vào tiến độ.</li>
         </ol>
-        <p class="muted small">Câu hỏi lấy ngẫu nhiên, ưu tiên câu ⭐ và câu từ các bài review thật (Section 12).</p>
+        <p class="muted small">Câu hỏi lấy ngẫu nhiên, ưu tiên câu ${STAR} và câu từ các bài review thật (Section 12).</p>
         <button class="btn btn-primary" id="btn-mock-start">Bắt đầu thi thử</button>
       </div>
       ${mockHistoryHtml(5)}`;
@@ -780,10 +1177,10 @@
           <article class="panel card">
             <div class="card-meta"><span class="tag">Câu ${i + 1}</span><span class="muted small">${c.sourceLabel} ${escapeHtml(c.num)} · ${escapeHtml(c.section)}</span></div>
             ${questionHtml(c)}
-            ${glossaryHtml(c, false)}
             <textarea data-i="${i}" rows="7" placeholder="Câu trả lời của bạn…">${escapeHtml(mock.answers[i])}</textarea>
+            ${glossaryHtml(c, false)}
           </article>`).join("")}
-        <div class="card-actions"><button class="btn btn-primary" id="btn-submit-written">Nộp bài viết → sang phần nói</button></div>`;
+        <div class="card-actions"><button class="btn btn-primary" id="btn-submit-written">Nộp bài viết, sang phần nói ${icon("arrow-right")}</button></div>`;
       $("#btn-submit-written").addEventListener("click", finishWritten);
       return;
     }
@@ -794,13 +1191,13 @@
         <article class="panel card">
           <div class="card-meta"><span class="tag">${c.sourceLabel} ${escapeHtml(c.num)}</span><span class="muted small">${escapeHtml(c.section)}</span></div>
           ${questionHtml(c)}
-          ${glossaryHtml(c, mock.revealed)}
           ${answerHtml(c, !mock.revealed)}
           <div class="card-actions">
             ${mock.revealed
               ? `<button class="btn grade g0" data-g="0">Chưa thuộc <kbd>1</kbd></button><button class="btn grade g1" data-g="1">Tạm <kbd>2</kbd></button><button class="btn grade g2" data-g="2">Thuộc <kbd>3</kbd></button>`
               : `<button class="btn btn-primary" id="btn-mock-reveal">Đã trả lời xong, xem đáp án <kbd>Space</kbd></button>`}
           </div>
+          ${glossaryHtml(c, mock.revealed)}
         </article>`;
       if (mock.revealed) area.querySelectorAll(".grade").forEach((b) => b.addEventListener("click", () => mockGrade(Number(b.dataset.g))));
       else $("#btn-mock-reveal").addEventListener("click", () => { mock.revealed = true; renderMock(); });
@@ -815,7 +1212,6 @@
         <article class="panel card">
           <div class="card-meta"><span class="tag">Câu viết ${i + 1}</span><span class="muted small">${c.sourceLabel} ${escapeHtml(c.num)}</span></div>
           ${questionHtml(c)}
-          ${glossaryHtml(c, true)}
           <div class="compare">
             <div><h4>Bài của bạn</h4><div class="mine">${mock.answers[i] ? escapeHtml(mock.answers[i]).replace(/\n/g, "<br>") : '<span class="muted">(bỏ trống)</span>'}</div></div>
             <div><h4>Đáp án mẫu</h4>${answerHtml(c, false)}</div>
@@ -824,8 +1220,9 @@
           <div class="card-actions" data-wi="${i}">
             ${mock.graded[c.id] === undefined
               ? `<button class="btn grade g0" data-g="0">Chưa đạt</button><button class="btn grade g1" data-g="1">Tạm</button><button class="btn grade g2" data-g="2">Tốt</button>`
-              : '<span class="muted">Đã chấm ✓</span>'}
+              : `<span class="muted">${icon("check")} Đã chấm</span>`}
           </div>
+          ${glossaryHtml(c, true)}
         </article>`).join("")}
       <div class="card-actions"><button class="btn btn-primary" id="btn-mock-again">Thi thử lần nữa</button><button class="btn btn-ghost" id="btn-mock-home">Về trang Hôm nay</button></div>`;
     area.querySelectorAll("#mock-area article.card").forEach((art, i) => attachFeedback(art, mock.written[i], mock.answers[i]));
@@ -906,18 +1303,25 @@
     $("#f-source").value = "all"; fillSections(); $("#f-mode").value = "due"; $("#f-star").checked = false;
     startPractice(todayQueue());
   });
+  $("#btn-reel-today").addEventListener("click", () => openReel(todayQueue));
+  $("#btn-reel").addEventListener("click", () => {
+    const filters = { source: $("#f-source").value, section: $("#f-section").value, mode: $("#f-mode").value, starOnly: $("#f-star").checked };
+    // Random mode is drawn once, so "Lướt tiếp" continues through the same shuffled order.
+    const fixed = filters.mode === "random" ? buildQueue(filters) : null;
+    openReel(() => fixed || buildQueue(filters));
+  });
   $("#btn-weak-all").addEventListener("click", () => {
     showView("practice");
     $("#f-source").value = "all"; fillSections(); $("#f-mode").value = "weak"; $("#f-star").checked = false;
     startPractice();
   });
   $("#f-source").addEventListener("change", fillSections);
-  const THEMES = { auto: "🌓 Tự động", light: "☀️ Sáng", dark: "🌙 Tối" };
+  const THEMES = { auto: ["sun-moon", "Tự động"], light: ["sun", "Sáng"], dark: ["moon", "Tối"] };
   function applyTheme() {
     const theme = state.settings.theme || "auto";
     if (theme === "auto") delete document.documentElement.dataset.theme;
     else document.documentElement.dataset.theme = theme;
-    $("#btn-theme").textContent = THEMES[theme];
+    $("#btn-theme").innerHTML = `${icon(THEMES[theme][0])} ${THEMES[theme][1]}`;
   }
   $("#btn-theme").addEventListener("click", () => {
     const order = ["auto", "light", "dark"];
@@ -942,7 +1346,10 @@
 
   document.addEventListener("keydown", (e) => {
     if (e.target.matches("textarea, input, select")) return;
+    if (reel) { reelKey(e); return; }
     if (currentView === "practice" && session) {
+      const card = session.queue[session.index];
+      if (card && session.mcq && !session.revealed && /^[a-d]$/i.test(e.key) && mcqKey(card, session.mcq, e.key)) { renderCard(); return; }
       if (e.code === "Space" && !session.revealed && session.index < session.queue.length) { e.preventDefault(); reveal(); }
       else if (session.revealed && ["1", "2", "3"].includes(e.key)) grade(Number(e.key) - 1);
     } else if (currentView === "mock" && mock && mock.phase === "oral") {
@@ -1020,6 +1427,7 @@
   });
 
   // ---------- init ----------
+  document.querySelectorAll("i[data-icon]").forEach((i) => (i.outerHTML = icon(i.dataset.icon, i.dataset.class || "")));
   applyTheme();
   syncLangButtons();
   fillSources();

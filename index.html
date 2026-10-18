@@ -65,8 +65,9 @@
           <p class="muted small" id="goal-text"></p>
         </div>
         <div class="checkin-actions">
-          <button class="btn btn-ghost" id="btn-checkin">✓ Điểm danh</button>
-          <button class="btn btn-primary" id="btn-start-today">Bắt đầu ôn hôm nay →</button>
+          <button class="btn btn-ghost" id="btn-checkin"><i data-icon="check"></i> Điểm danh</button>
+          <button class="btn btn-primary" id="btn-start-today">Bắt đầu ôn hôm nay <i data-icon="arrow-right"></i></button>
+          <button class="btn btn-ghost" id="btn-reel-today"><i data-icon="reels"></i> Lướt 10 thẻ</button>
         </div>
       </div>
 
@@ -110,8 +111,9 @@
             <option value="new">Chỉ câu mới</option>
           </select>
         </label>
-        <label class="check"><input type="checkbox" id="f-star"> Chỉ câu ⭐</label>
+        <label class="check"><input type="checkbox" id="f-star"> Chỉ câu <i data-icon="star" data-class="icon-star"></i></label>
         <button class="btn btn-primary" id="btn-start-practice">Bắt đầu</button>
+        <button class="btn btn-ghost" id="btn-reel" title="Mỗi thẻ một màn hình, vuốt để chấm"><i data-icon="reels"></i> Lướt</button>
       </div>
       <div id="practice-area"></div>
     </section>
@@ -140,8 +142,8 @@
         <p class="muted small">Mục tiêu mỗi ngày là số thẻ đến hạn cộng số thẻ mới cần học để kịp ngày thi, và không thấp hơn số tối thiểu này.</p>
         <p class="muted small">Tiến độ chỉ lưu trong trình duyệt này. Xuất file backup thường xuyên, nhất là trước khi xóa lịch sử trình duyệt hoặc đổi máy. Nhập backup sẽ <b>gộp</b> với tiến độ hiện có, nên có thể xuất ở điện thoại rồi nhập vào laptop và ngược lại. Muốn thay hẳn bằng backup thì xóa tiến độ trước rồi nhập.</p>
         <div class="settings-row">
-          <button class="btn btn-ghost" id="btn-export">⬇ Xuất backup</button>
-          <label class="btn btn-ghost file-btn">⬆ Nhập backup<input type="file" id="file-import" accept="application/json"></label>
+          <button class="btn btn-ghost" id="btn-export"><i data-icon="download"></i> Xuất backup</button>
+          <label class="btn btn-ghost file-btn"><i data-icon="upload"></i> Nhập backup<input type="file" id="file-import" accept="application/json"></label>
           <button class="btn btn-danger" id="btn-reset">Xóa toàn bộ tiến độ</button>
         </div>
       </div>
@@ -150,6 +152,7 @@
 
   <footer class="foot muted small" id="foot"></footer>
 
+  <div id="reel" class="reel" hidden></div>
   <script src="questions.enc.js"></script>
   <script src="unlock.js"></script>
 </body>
