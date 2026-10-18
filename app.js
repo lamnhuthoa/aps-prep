@@ -174,8 +174,9 @@
     } else if (grade === 1) {
       rec.box = Math.max(1, rec.box);
       rec.due = addDays(key, 1);
-    } else if (firstToday || rec.lastGrade !== 2) {
-      // A second "Thuộc" on the same day (e.g. in random mode) does not move the card up again.
+    } else if (isNew || rec.lastGrade !== 2 || isDue(id, key)) {
+      // "Thuộc" again on a card already known and not yet due (reviewing early, or twice in a day)
+      // keeps its schedule, so extra reviews do not push the next review further out.
       rec.box = Math.min(rec.box + 1, INTERVALS.length - 1);
       rec.due = addDays(key, INTERVALS[rec.box]);
     }
@@ -445,6 +446,8 @@
     return a;
   }
   function sourceLabel(src) { return (CARDS.find((c) => c.source === src) || {}).sourceLabel || src; }
+  // Section name without the course list in brackets, for the narrow filter menu.
+  function shortSection(s) { return s.replace(/\s*\([^)]*\)/g, "") || s; }
   function sectionsOf(src) {
     const seen = [];
     for (const c of CARDS) if ((src === "all" || c.source === src) && !seen.includes(c.section)) seen.push(c.section);
@@ -574,10 +577,18 @@
       SOURCE_ORDER.filter((s) => CARDS.some((c) => c.source === s))
         .map((s) => `<option value="${s}">${sourceLabel(s)} (${CARDS.filter((c) => c.source === s).length})</option>`).join("");
   }
+  // Section 4 of the reported guide became the "About you" cards; the menu points there.
+  const SECTION_POINTERS = { reported: { number: 4, source: "personal", title: "Interview questions about you" } };
   function fillSections() {
     const src = $("#f-source").value;
-    $("#f-section").innerHTML = `<option value="all">Tất cả</option>` +
-      sectionsOf(src).map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
+    const options = sectionsOf(src).map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(shortSection(s))}</option>`);
+    const pointer = SECTION_POINTERS[src];
+    if (pointer) {
+      const at = sectionsOf(src).findIndex((s) => parseInt(s, 10) > pointer.number);
+      options.splice(at < 0 ? options.length : at, 0,
+        `<option value="@${pointer.source}">${pointer.number}. ${pointer.title} → ${sourceLabel(pointer.source)}</option>`);
+    }
+    $("#f-section").innerHTML = `<option value="all">Tất cả</option>` + options.join("");
   }
 
   function buildQueue({ source = "all", section = "all", mode = "due", starOnly = false, limit = Infinity }) {
@@ -585,6 +596,12 @@
     let pool = CARDS.filter((c) => (source === "all" || c.source === source) && (section === "all" || c.section === section) && (!starOnly || c.star));
     if (mode === "random") return shuffle(pool).slice(0, limit);
     if (mode === "new") return freshOrdered(pool).slice(0, limit);
+    // Cards whose last grade was Tạm and/or Thuộc, least secure first.
+    const lastGrades = { learned: [1, 2], shaky: [1], known: [2] }[mode];
+    if (lastGrades) {
+      return pool.filter((c) => state.cards[c.id] && lastGrades.includes(state.cards[c.id].lastGrade))
+        .sort((a, b) => state.cards[a.id].box - state.cards[b.id].box || dueOf(a.id).localeCompare(dueOf(b.id))).slice(0, limit);
+    }
     if (mode === "weak") {
       return pool.filter((c) => state.cards[c.id] && state.cards[c.id].lapses > 0)
         .sort((a, b) => state.cards[b.id].lapses - state.cards[a.id].lapses).slice(0, limit);
@@ -1316,6 +1333,11 @@
     startPractice();
   });
   $("#f-source").addEventListener("change", fillSections);
+  $("#f-section").addEventListener("change", (e) => {
+    if (!e.target.value.startsWith("@")) return;
+    $("#f-source").value = e.target.value.slice(1);
+    fillSections();
+  });
   const THEMES = { auto: ["sun-moon", "Tự động"], light: ["sun", "Sáng"], dark: ["moon", "Tối"] };
   function applyTheme() {
     const theme = state.settings.theme || "auto";
