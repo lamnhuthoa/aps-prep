@@ -10,7 +10,7 @@
   <meta name="theme-color" content="#b4232a">
   <link rel="apple-touch-icon" href="icon.svg">
   <link rel="icon" href="icon.svg">
-  <link rel="stylesheet" href="style.css?v=10cf0593a4">
+  <link rel="stylesheet" href="style.css?v=9a6c100feb">
   <script>
     // Apply the saved theme before first paint to avoid a flash.
     try {
@@ -31,6 +31,7 @@
     <nav class="tabs" role="tablist">
       <button class="tab active" data-view="today">Hôm nay</button>
       <button class="tab" data-view="practice">Luyện tập</button>
+      <button class="tab" data-view="podcast">Podcast</button>
       <button class="tab" data-view="mock">Thi thử</button>
       <button class="tab" data-view="progress">Tiến độ</button>
     </nav>
@@ -94,6 +95,13 @@
       </div>
     </section>
 
+    <!-- PODCAST: listen to the cards, one after the other -->
+    <section id="view-podcast" class="view">
+      <div class="panel pod-player" id="pod-player"></div>
+      <div class="panel filters pod-settings" id="pod-settings"></div>
+      <p class="muted small" id="pod-note"></p>
+    </section>
+
     <!-- PRACTICE -->
     <section id="view-practice" class="view">
       <div class="panel filters">
@@ -155,8 +163,9 @@
 
   <footer class="foot muted small" id="foot"></footer>
 
+  <div id="pod-mini" class="pod-mini" hidden></div>
   <div id="reel" class="reel" hidden></div>
   <script src="questions.enc.js?v=5102bdd5dd"></script>
-  <script src="unlock.js?v=f67a679288"></script>
+  <script src="unlock.js?v=94d0078f12"></script>
 </body>
 </html>

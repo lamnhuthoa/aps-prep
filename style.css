@@ -293,3 +293,22 @@ body.reel-open { overflow: hidden; }
 .reel-legend { font-size: 0.75rem; text-align: center; margin: 0; }
 .reel-end { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; }
 @media (hover: none) { .reel-reveal kbd, .reel-grades kbd { display: none; } }
+
+/* ---------- podcast ---------- */
+.pod-now { margin: 8px 0; }
+.pod-caption { min-height: 1.5em; font-style: italic; margin-bottom: 8px; overflow-wrap: anywhere; }
+.pod-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.pod-controls .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.pod-play { min-width: 160px; }
+.pod-jump { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.9rem; color: var(--muted); }
+.pod-jump input { width: 4.5rem; }
+.pod-settings select { max-width: 200px; }
+.pod-mini { position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 40; display: flex; align-items: center; gap: 8px; max-width: 960px; margin: 0 auto; padding: 8px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18); }
+.pod-mini[hidden] { display: none; }
+.pod-mini-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; font-size: 0.9rem; }
+body.pod-open main { padding-bottom: 72px; }
+/* five tabs on a phone: keep each label on one line */
+@media (max-width: 520px) {
+  .tabs { width: 100%; justify-content: space-between; gap: 0; }
+  .tab { padding: 6px 6px; font-size: 0.85rem; white-space: nowrap; }
+}

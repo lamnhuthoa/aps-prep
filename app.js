@@ -34,6 +34,11 @@
     "chevron-right": '<path d="m9 18 6-6-6-6"/>',
     "chevron-up": '<path d="m18 15-6-6-6 6"/>',
     minus: '<path d="M5 12h14"/>',
+    play: '<polygon points="6 3 20 12 6 21 6 3"/>',
+    pause: '<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>',
+    "skip-back": '<polygon points="19 20 9 12 19 4 19 20"/><line x1="5" x2="5" y1="19" y2="5"/>',
+    "skip-forward": '<polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/>',
+    headphones: '<path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/>',
     plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
     eye: '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
   };
@@ -468,6 +473,8 @@
     if (name === "today") renderToday();
     if (name === "progress") renderProgress();
     if (name === "mock" && !mock) renderMockIntro();
+    if (name === "podcast") renderPodcast();
+    renderPodcastMini();
   }
 
   function renderToday() {
@@ -1374,6 +1381,11 @@
       if (card && session.mcq && !session.revealed && /^[a-d]$/i.test(e.key) && mcqKey(card, session.mcq, e.key)) { renderCard(); return; }
       if (e.code === "Space" && !session.revealed && session.index < session.queue.length) { e.preventDefault(); reveal(); }
       else if (session.revealed && ["1", "2", "3"].includes(e.key)) grade(Number(e.key) - 1);
+    } else if (currentView === "podcast") {
+      if (e.target.closest("button")) return; // a focused button handles Space itself
+      if (e.code === "Space") { e.preventDefault(); podToggle(); }
+      else if (e.key === "ArrowRight") podSkip(1);
+      else if (e.key === "ArrowLeft") podSkip(-1);
     } else if (currentView === "mock" && mock && mock.phase === "oral") {
       if (e.code === "Space" && !mock.revealed) { e.preventDefault(); mock.revealed = true; renderMock(); }
       else if (mock.revealed && ["1", "2", "3"].includes(e.key)) mockGrade(Number(e.key) - 1);
@@ -1447,6 +1459,399 @@
     save();
     renderProgress();
   });
+
+  // ---------- podcast: listen to the cards one after the other ----------
+  // The playlist is the cards of the chosen source and section, in order or shuffled. A card is read as a few segments
+  // (the question, a pause to think, the answer), in English and/or Vietnamese. The voices are the ones of the device
+  // (window.speechSynthesis): it works offline, needs no audio files, and the questions stay encrypted.
+  const synth = window.speechSynthesis;
+  const POD_DEFAULTS = { source: "all", section: "all", order: "list", lang: "follow", rate: 1, think: 3, answers: true, voiceEn: "", voiceVi: "", seed: 1, cardId: "" };
+  const POD_MAX_CHUNK = 240; // some voices stop in the middle of a longer text
+  const POD_TEXT = {
+    en: { question: "Question", answer: "Answer", section: "Section", percent: "percent", and: "and", columns: "Columns", atLeast: "at least", atMost: "at most", equals: "equals", over: "divided by", minus: "minus", times: "times", plus: "plus" },
+    vi: { question: "Câu", answer: "Đáp án", section: "Phần", percent: "phần trăm", and: "và", columns: "Các cột", atLeast: "ít nhất", atMost: "nhiều nhất", equals: "bằng", over: "chia", minus: "trừ", times: "nhân", plus: "cộng" },
+  };
+  const pod = { list: [], index: 0, segs: [], seg: 0, playing: false, started: false, ended: false, run: 0, timer: null, wake: null, voices: [] };
+
+  function podSettings() {
+    state.settings.podcast = { ...POD_DEFAULTS, ...(state.settings.podcast || {}) };
+    return state.settings.podcast;
+  }
+  function podLangMode() {
+    const s = podSettings();
+    const mode = s.lang === "follow" ? lang() : s.lang;
+    return podVoice("vi") ? mode : "en"; // without a Vietnamese voice the Vietnamese text would be read with an English one
+  }
+  // Shuffle that can be repeated from a seed, so a shuffled playlist is the same after a reload and the position is kept.
+  function seededShuffle(arr, seed) {
+    const a = arr.slice();
+    let t = seed >>> 0;
+    const rand = () => {
+      t += 0x6d2b79f5;
+      let r = Math.imul(t ^ (t >>> 15), 1 | t);
+      r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+      return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+    };
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    return a;
+  }
+  function podList() {
+    const s = podSettings();
+    const cards = CARDS.filter((c) => (s.source === "all" || c.source === s.source) && (s.section === "all" || c.section === s.section));
+    return s.order === "shuffle" ? seededShuffle(cards, s.seed) : cards;
+  }
+
+  // ----- text to speech: markdown becomes something that sounds right -----
+  function spokenTable(lines, W) {
+    const rows = lines.filter((r) => !/^\|\s*-/.test(r)).map((r) => r.replace(/^\||\|$/g, "").split("|").map((c) => c.trim()));
+    const [head = [], ...body] = rows;
+    // two columns read as "name: value"; more columns name each cell by its column
+    if (head.length === 2) return body.map((r) => `${r[0]}: ${r[1]}.`).join(" ");
+    return [`${W.columns}: ${head.join(", ")}.`, ...body.map((r) => r.map((c, i) => `${head[i] || ""} ${c}`.trim()).join(", ") + ".")].join(" ");
+  }
+  function speakable(text, lng) {
+    const W = POD_TEXT[lng === "vi" ? "vi" : "en"];
+    const lines = text.split("\n");
+    const out = [];
+    let table = [];
+    for (const line of lines) {
+      if (line.trim().startsWith("|")) { table.push(line.trim()); continue; }
+      if (table.length) { out.push(spokenTable(table, W)); table = []; }
+      out.push(line);
+    }
+    if (table.length) out.push(spokenTable(table, W));
+    return out.join("\n")
+      .replace(/\[VERIFY[^\]]*\]/g, "")
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+      .replace(/\[([^\]]+)\]\(https?:[^)\s]+\)/g, "$1")
+      .replace(/`([^`]+)`/g, "$1")
+      .replace(/\*\*([^*]+)\*\*/g, "$1")
+      .replace(/(^|[^*])\*([^*\s][^*]*?)\*(?!\*)/g, "$1$2")
+      .replace(/^\s*>\s?/gm, "")
+      .replace(/^\s*[-•]\s+/gm, "")
+      .replace(/(\d)\s*%/g, `$1 ${W.percent}`)
+      .replace(/\s*&\s*/g, ` ${W.and} `)
+      .replace(/\s*(?:→|->)\s*/g, ", ")
+      .replace(/≥/g, ` ${W.atLeast} `)
+      .replace(/≤/g, ` ${W.atMost} `)
+      // arithmetic between numbers or brackets is said in words; a dash or a slash inside a word is left alone
+      .replace(/([\d)%])\s*=\s*(?=[\d(])/g, `$1 ${W.equals} `)
+      .replace(/([\d)])\s+\/\s+(?=[\d(])/g, `$1 ${W.over} `)
+      .replace(/([\d)])\s+-\s+(?=[\d(])/g, `$1 ${W.minus} `)
+      .replace(/([\d)])\s*[×x*]\s*(?=[\d(])/g, `$1 ${W.times} `)
+      .replace(/([\d)])\s*\+\s*(?=[\d(])/g, `$1 ${W.plus} `)
+      .replace(/[*_#]+/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  // The text as pieces that a voice can read in one go: the sentences of answerChunks(), cut further at a comma when long.
+  function speechChunks(text, lng) {
+    const out = [];
+    for (const raw of answerChunks({ answer: text })) {
+      let spoken = speakable(raw, lng);
+      while (spoken.length > POD_MAX_CHUNK) {
+        const cut = Math.max(spoken.lastIndexOf(", ", POD_MAX_CHUNK), spoken.lastIndexOf("; ", POD_MAX_CHUNK), spoken.lastIndexOf(" ", POD_MAX_CHUNK));
+        const at = cut > 80 ? cut + 1 : POD_MAX_CHUNK;
+        out.push(spoken.slice(0, at).trim());
+        spoken = spoken.slice(at).trim();
+      }
+      if (spoken) out.push(spoken);
+    }
+    return out;
+  }
+  // What is said for one card, as segments { lng, text, pause (seconds after it), kind }.
+  function cardSegments(card, index) {
+    const s = podSettings();
+    const mode = podLangMode();
+    const withVi = hasVi(card) && mode !== "en";
+    const viFirst = hasVi(card) && mode === "vi";
+    const both = withVi && !viFirst;
+    const segs = [];
+    const add = (lng, text, pause, kind) => {
+      const pieces = speechChunks(text, lng);
+      pieces.forEach((piece, i) => segs.push({ lng, text: piece, pause: i === pieces.length - 1 ? pause : 0.15, kind }));
+    };
+    const thinkPause = s.answers ? s.think : 1.5;
+    const previous = pod.list[index - 1];
+    // in a shuffled playlist the section changes at every card, so it is only named when the cards are in order
+    if (s.order === "list" && (!previous || previous.section !== card.section)) add("en", `${POD_TEXT.en.section}: ${shortSection(card.section)}`, 0.6, "meta");
+    const first = viFirst ? "vi" : "en";
+    add(first, `${POD_TEXT[first].question} ${index + 1}.`, 0.3, "meta");
+    if (viFirst) {
+      add("vi", card.vi.question, thinkPause, "q");
+    } else {
+      add("en", card.question, both ? 0.5 : thinkPause, "q");
+      if (both) add("vi", card.vi.question, thinkPause, "q");
+    }
+    if (s.answers) {
+      if (viFirst) {
+        add("vi", `${POD_TEXT.vi.answer}.`, 0.3, "meta");
+        add("vi", card.vi.answer, 1, "a");
+      } else {
+        add("en", `${POD_TEXT.en.answer}.`, 0.3, "meta");
+        add("en", card.answer, both ? 0.6 : 1, "a");
+        if (both) {
+          add("vi", `${POD_TEXT.vi.answer}.`, 0.3, "meta");
+          add("vi", card.vi.answer, 1, "a");
+        }
+      }
+    }
+    return segs;
+  }
+
+  // ----- voices -----
+  function podLoadVoices() { pod.voices = synth ? synth.getVoices() : []; }
+  function podVoicesOf(prefix) { return pod.voices.filter((v) => v.lang.toLowerCase().replace("_", "-").startsWith(prefix)); }
+  function podVoice(lng) {
+    const prefix = lng === "vi" ? "vi" : "en";
+    const pool = podVoicesOf(prefix);
+    const saved = lng === "vi" ? podSettings().voiceVi : podSettings().voiceEn;
+    // The voices that run on the device come first: an online voice (some of Chrome and Edge) sends the text to the company
+    // that runs it, and the questions are encrypted on purpose.
+    const best = (list) => list.find((v) => /natural|neural/i.test(v.name)) ||
+      list.find((v) => /google|microsoft|samantha|daniel|linh/i.test(v.name)) || list[0] || null;
+    return pool.find((v) => v.name === saved) || best(pool.filter((v) => v.localService)) || best(pool);
+  }
+
+  // ----- playback -----
+  // `run` numbers each start; a callback of an older run (after a pause or a skip) does nothing.
+  function podUtterance(seg) {
+    const voice = podVoice(seg.lng);
+    const u = new SpeechSynthesisUtterance(seg.text);
+    u.lang = voice ? voice.lang : seg.lng === "vi" ? "vi-VN" : "en-US";
+    if (voice) u.voice = voice;
+    u.rate = Number(podSettings().rate) || 1;
+    return u;
+  }
+  function podStep(run) {
+    if (!pod.playing || run !== pod.run) return;
+    const seg = pod.segs[pod.seg];
+    if (!seg) { pod.timer = setTimeout(() => { if (run === pod.run) podGo(pod.index + 1); }, 800); return; }
+    podRenderPlayer();
+    const u = podUtterance(seg);
+    let done = false;
+    const finish = () => {
+      if (done || run !== pod.run) return;
+      done = true;
+      pod.seg += 1;
+      pod.timer = setTimeout(() => podStep(run), seg.pause * 1000);
+    };
+    u.onend = finish;
+    u.onerror = (e) => { if (e.error !== "canceled" && e.error !== "interrupted") finish(); };
+    synth.speak(u);
+  }
+  // Chrome can drop the first words of a speech that starts right after cancel(): wait a moment.
+  function podStart() {
+    const run = pod.run;
+    pod.timer = setTimeout(() => podStep(run), 60);
+  }
+  function podStopSpeech() {
+    pod.run += 1;
+    clearTimeout(pod.timer);
+    if (synth) synth.cancel();
+  }
+  function podPlay() {
+    if (!synth || !pod.list.length) return;
+    if (pod.ended) { pod.ended = false; podGo(0, true); return; }
+    podStopSpeech();
+    pod.playing = true;
+    pod.started = true;
+    podWake(true);
+    podStart();
+    podMediaSession();
+    podRenderPlayer();
+    renderPodcastMini();
+  }
+  function podPause() {
+    pod.playing = false;
+    podStopSpeech();
+    podWake(false);
+    podMediaSession();
+    podRenderPlayer();
+    renderPodcastMini();
+  }
+  function podToggle() { pod.playing ? podPause() : podPlay(); }
+  // Go to card i of the playlist and start it from the first segment; it plays on if the podcast was playing.
+  function podGo(i, play = pod.playing) {
+    if (!pod.list.length) return;
+    if (i >= pod.list.length) { podFinish(); return; }
+    podStopSpeech();
+    pod.index = Math.max(0, i);
+    const card = pod.list[pod.index];
+    pod.segs = cardSegments(card, pod.index);
+    pod.seg = 0;
+    podSettings().cardId = card.id;
+    save();
+    if (play) { pod.playing = true; pod.started = true; podWake(true); podStart(); }
+    podMediaSession();
+    podRenderPlayer();
+    renderPodcastMini();
+  }
+  function podSkip(delta) { podGo(pod.index + delta); }
+  function podFinish() {
+    podStopSpeech();
+    pod.playing = false;
+    pod.ended = true;
+    podWake(false);
+    podRenderPlayer();
+    renderPodcastMini();
+  }
+  // The list or the settings changed: build the list again and go back to the card that was playing (or the first).
+  function podRebuild(fromStart = false) {
+    const wasPlaying = pod.playing;
+    podStopSpeech();
+    pod.playing = false;
+    const s = podSettings();
+    if (fromStart) s.cardId = "";
+    pod.list = podList();
+    const at = pod.list.findIndex((c) => c.id === s.cardId);
+    pod.index = at >= 0 ? at : 0;
+    pod.segs = pod.list.length ? cardSegments(pod.list[pod.index], pod.index) : [];
+    pod.seg = 0;
+    pod.ended = false;
+    save();
+    podRenderPlayer();
+    if (wasPlaying && pod.list.length) podPlay(); else renderPodcastMini();
+  }
+  async function podWake(on) {
+    try {
+      if (on && navigator.wakeLock && !pod.wake) {
+        pod.wake = await navigator.wakeLock.request("screen");
+        pod.wake.addEventListener("release", () => { pod.wake = null; });
+      } else if (!on && pod.wake) {
+        await pod.wake.release();
+        pod.wake = null;
+      }
+    } catch (e) { /* the screen may sleep: not every browser has it */ }
+  }
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && pod.playing) podWake(true); });
+  // Controls on the lock screen and the headset, where the browser has them.
+  function podMediaSession() {
+    if (!("mediaSession" in navigator) || typeof MediaMetadata === "undefined") return;
+    const card = pod.list[pod.index];
+    if (!card) return;
+    navigator.mediaSession.metadata = new MediaMetadata({ title: speakable(card.question, "en").slice(0, 120), artist: shortSection(card.section), album: "APS Prep" });
+    navigator.mediaSession.playbackState = pod.playing ? "playing" : "paused";
+    for (const [action, fn] of [["play", podPlay], ["pause", podPause], ["previoustrack", () => podSkip(-1)], ["nexttrack", () => podSkip(1)]]) {
+      try { navigator.mediaSession.setActionHandler(action, fn); } catch (e) { /* this action is not supported */ }
+    }
+  }
+
+  // ----- the view -----
+  function podOptions(items, value) {
+    return items.map(([v, label]) => `<option value="${escapeHtml(String(v))}"${String(v) === String(value) ? " selected" : ""}>${escapeHtml(label)}</option>`).join("");
+  }
+  function podVoiceOptions(prefix, saved) {
+    const pool = podVoicesOf(prefix);
+    if (!pool.length) return `<option value="">Chưa có giọng</option>`;
+    const chosen = podVoice(prefix === "vi" ? "vi" : "en");
+    return pool.map((v) => `<option value="${escapeHtml(v.name)}"${(saved ? v.name === saved : chosen && v.name === chosen.name) ? " selected" : ""}>${escapeHtml(v.name)}${v.localService ? "" : " (online)"}</option>`).join("");
+  }
+  function renderPodcast() {
+    const s = podSettings();
+    if (!pod.list.length && !pod.started) podRebuild();
+    const sources = SOURCE_ORDER.filter((x) => CARDS.some((c) => c.source === x)).map((x) => [x, sourceLabel(x)]);
+    const sections = sectionsOf(s.source).map((x) => [x, shortSection(x)]);
+    $("#pod-settings").innerHTML = `
+      <label>Nguồn <select id="p-source">${podOptions([["all", `Tất cả (${CARDS.length})`], ...sources], s.source)}</select></label>
+      <label>Phần <select id="p-section">${podOptions([["all", "Tất cả"], ...sections], s.section)}</select></label>
+      <label>Thứ tự <select id="p-order">${podOptions([["list", "Theo thứ tự"], ["shuffle", "Ngẫu nhiên"]], s.order)}</select></label>
+      <label>Ngôn ngữ nghe <select id="p-lang">${podOptions([["follow", "Theo nút EN/VI ở trên"], ["en", "Tiếng Anh"], ["vi", "Tiếng Việt"], ["both", "Anh rồi Việt"]], s.lang)}</select></label>
+      <label>Tốc độ <select id="p-rate">${podOptions([[0.8, "0.8×"], [0.9, "0.9×"], [1, "1×"], [1.1, "1.1×"], [1.25, "1.25×"], [1.5, "1.5×"]], s.rate)}</select></label>
+      <label>Nghỉ trước đáp án <select id="p-think">${podOptions([[0, "Không"], [3, "3 giây"], [6, "6 giây"], [10, "10 giây"]], s.think)}</select></label>
+      <label class="check"><input type="checkbox" id="p-answers"${s.answers ? " checked" : ""}> Đọc cả đáp án</label>
+      <label>Giọng Anh <select id="p-voice-en">${podVoiceOptions("en", s.voiceEn)}</select></label>
+      <label>Giọng Việt <select id="p-voice-vi">${podVoiceOptions("vi", s.voiceVi)}</select></label>`;
+    const note = !synth ? "Trình duyệt này không hỗ trợ đọc thành tiếng (Web Speech). Thử Chrome, Edge hoặc Safari."
+      : [
+        "App không dùng mô hình AI hay dịch vụ âm thanh nào: giọng đọc do trình duyệt và hệ điều hành cung cấp. Giọng chạy trên máy được ưu tiên (nghe được cả khi không có mạng); giọng ghi \"(online)\" có thể gửi nội dung câu hỏi tới nhà cung cấp trình duyệt, nên chỉ chọn khi cần.",
+        podVoicesOf("vi").length ? "" : "Thiết bị chưa có giọng tiếng Việt, nên phần tiếng Việt được bỏ qua. Cài giọng Việt trong cài đặt giọng nói của hệ điều hành.",
+        "Trên điện thoại, khóa màn hình có thể làm trình duyệt dừng đọc: hãy giữ màn hình sáng (app tự xin giữ sáng khi đang đọc).",
+      ].filter(Boolean).join(" ");
+    $("#pod-note").textContent = note;
+    podRenderPlayer();
+  }
+  function podRenderPlayer() {
+    const box = $("#pod-player");
+    if (!box || (document.activeElement && document.activeElement.id === "pod-jump")) return;
+    const card = pod.list[pod.index];
+    if (!card) { box.innerHTML = `<h3>${icon("headphones")} Podcast</h3><p class="muted">Không có thẻ nào trong bộ lọc này.</p>`; return; }
+    const seg = pod.segs[Math.min(pod.seg, pod.segs.length - 1)];
+    const pct = Math.round(((pod.index + pod.seg / Math.max(1, pod.segs.length)) / pod.list.length) * 100);
+    const label = pod.playing ? "Tạm dừng" : pod.ended ? "Nghe lại từ đầu" : pod.started ? "Tiếp tục" : "Nghe";
+    box.innerHTML = `
+      <div class="panel-head"><h3>${icon("headphones")} Podcast · ${pod.list.length} thẻ</h3><span class="muted small">${escapeHtml(shortSection(card.section))}</span></div>
+      <div class="pod-now">${questionHtml(card)}</div>
+      <div class="pod-caption muted small">${pod.ended ? "Đã nghe hết danh sách." : seg ? escapeHtml(seg.text) : ""}</div>
+      <div class="goal-bar"><div class="goal-fill" style="width:${pod.ended ? 100 : pct}%"></div></div>
+      <div class="pod-controls">
+        <button class="btn btn-ghost" data-pod="prev" title="Thẻ trước (←)"${synth ? "" : " disabled"}>${icon("skip-back")}</button>
+        <button class="btn btn-primary pod-play" data-pod="toggle" title="Phát / tạm dừng (Space)"${synth ? "" : " disabled"}>${icon(pod.playing ? "pause" : "play")} ${label}</button>
+        <button class="btn btn-ghost" data-pod="next" title="Thẻ sau (→)"${synth ? "" : " disabled"}>${icon("skip-forward")}</button>
+        <button class="btn btn-ghost small" data-pod="again"${synth ? "" : " disabled"}>Đọc lại thẻ này</button>
+        <label class="pod-jump">Thẻ <input type="number" id="pod-jump" min="1" max="${pod.list.length}" value="${pod.index + 1}"> / ${pod.list.length}</label>
+      </div>`;
+  }
+  // A small bar at the bottom while the podcast is on and another tab is open.
+  function renderPodcastMini() {
+    const box = $("#pod-mini");
+    const card = pod.list[pod.index];
+    const show = pod.started && currentView !== "podcast" && Boolean(card);
+    box.hidden = !show;
+    document.body.classList.toggle("pod-open", show);
+    if (!show) return;
+    const title = speakable(card.question, "en");
+    box.innerHTML = `
+      <button class="btn btn-primary small" data-pod="toggle" title="Phát / tạm dừng">${icon(pod.playing ? "pause" : "play")}</button>
+      <span class="pod-mini-title" data-pod="open" title="Mở Podcast">Thẻ ${pod.index + 1}/${pod.list.length} · ${escapeHtml(title.length > 80 ? title.slice(0, 80) + "…" : title)}</span>
+      <button class="btn btn-ghost small" data-pod="close" title="Dừng và đóng">${icon("x")}</button>`;
+  }
+  function podAction(action) {
+    if (action === "toggle") podToggle();
+    else if (action === "prev") podSkip(-1);
+    else if (action === "next") podSkip(1);
+    else if (action === "again") podGo(pod.index);
+    else if (action === "open") showView("podcast");
+    else if (action === "close") { podPause(); pod.started = false; renderPodcastMini(); }
+  }
+  document.addEventListener("click", (e) => {
+    const target = e.target.closest("[data-pod]");
+    if (target) podAction(target.dataset.pod);
+  });
+  $("#pod-player").addEventListener("change", (e) => {
+    if (e.target.id !== "pod-jump") return;
+    const n = Math.min(pod.list.length, Math.max(1, Number(e.target.value) || 1));
+    podGo(n - 1);
+  });
+  $("#pod-settings").addEventListener("change", (e) => {
+    const s = podSettings();
+    const id = e.target.id;
+    const value = e.target.type === "checkbox" ? e.target.checked : e.target.value;
+    if (id === "p-source") { s.source = value; s.section = "all"; podRebuild(true); renderPodcast(); return; }
+    if (id === "p-section") { s.section = value; podRebuild(true); return; }
+    if (id === "p-order") { s.order = value; s.seed = (Date.now() % 2147483647) + 1; podRebuild(true); return; }
+    if (id === "p-lang") s.lang = value;
+    else if (id === "p-rate") s.rate = Number(value);
+    else if (id === "p-think") s.think = Number(value);
+    else if (id === "p-answers") s.answers = Boolean(value);
+    else if (id === "p-voice-en") s.voiceEn = value;
+    else if (id === "p-voice-vi") s.voiceVi = value;
+    save();
+    podGo(pod.index); // read the card again with the new setting
+  });
+  document.querySelectorAll(".lang-btn").forEach((b) => b.addEventListener("click", () => {
+    if (podSettings().lang === "follow" && pod.list.length) { pod.segs = cardSegments(pod.list[pod.index], pod.index); pod.seg = 0; if (pod.playing) podGo(pod.index); }
+    if (currentView === "podcast") podRenderPlayer();
+  }));
+  if (synth) {
+    podLoadVoices();
+    synth.addEventListener("voiceschanged", () => {
+      podLoadVoices();
+      if (currentView === "podcast") renderPodcast();
+    });
+  }
+  // For the tests of the page: the pieces of the podcast without a speaker.
+  if (window.__APS_TEST__) window.__APS_TEST__.podcast = { speakable, speechChunks, cardSegments, pod, podRebuild, podGo, podPlay, podPause, podSettings };
 
   // ---------- init ----------
   document.querySelectorAll("i[data-icon]").forEach((i) => (i.outerHTML = icon(i.dataset.icon, i.dataset.class || "")));
