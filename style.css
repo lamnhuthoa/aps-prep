@@ -295,8 +295,6 @@ body.reel-open { overflow: hidden; }
 @media (hover: none) { .reel-reveal kbd, .reel-grades kbd { display: none; } }
 
 /* ---------- podcast ---------- */
-.pod-now { margin: 8px 0; }
-.pod-caption { min-height: 1.5em; font-style: italic; margin-bottom: 8px; overflow-wrap: anywhere; }
 .pod-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
 .pod-controls .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .pod-play { min-width: 160px; }
@@ -312,3 +310,32 @@ body.pod-open main { padding-bottom: 72px; }
   .tabs { width: 100%; justify-content: space-between; gap: 0; }
   .tab { padding: 6px 6px; font-size: 0.85rem; white-space: nowrap; }
 }
+/* podcast: seek bar and live transcript */
+.pod-seek { width: 100%; margin: 6px 0 2px; accent-color: var(--accent); }
+.pod-transcript-panel { position: relative; padding: 8px; }
+.pod-transcript { position: relative; max-height: 52vh; min-height: 160px; overflow-y: auto; overscroll-behavior: contain; padding: 4px; }
+.pod-follow { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25); background: var(--panel); }
+.pod-follow[hidden] { display: none; }
+.tr-card { padding: 6px 0 10px; border-bottom: 1px solid var(--line); border-radius: 8px; }
+.tr-card.tr-current { background: rgba(180, 35, 42, 0.05); }
+.tr-line { padding: 4px 10px; border-radius: 8px; cursor: pointer; }
+.tr-line:hover { background: var(--heat0); }
+.tr-line p, .tr-line ul, .tr-line ol { margin: 0 0 4px; }
+.tr-section .tr-en { font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.tr-title .tr-en { font-weight: 700; font-size: 1.02rem; }
+.tr-title .tr-vi { font-size: 0.85rem; }
+.tr-q .tr-en { font-weight: 600; }
+.tr-label .tr-en { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); }
+.tr-label .tr-vi { font-size: 0.78rem; }
+.tr-vi { margin-top: 2px; font-size: 0.93em; }
+.tr-now { background: rgba(224, 161, 0, 0.28); box-shadow: -3px 0 0 var(--gold); border-radius: 6px; transition: background 0.25s; }
+
+/* mathematics (KaTeX) */
+.katex { font-size: 1.1em; }
+.katex-display { margin: .6em 0; overflow-x: auto; overflow-y: hidden; }
+td .katex, th .katex { font-size: 1em; }
+
+/* neural voice */
+.pod-neural { display: flex; flex-direction: column; gap: 8px; }
+.pod-neural p { margin: 0; }
+.pod-neural-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

@@ -10,7 +10,8 @@
   <meta name="theme-color" content="#b4232a">
   <link rel="apple-touch-icon" href="icon.svg">
   <link rel="icon" href="icon.svg">
-  <link rel="stylesheet" href="style.css?v=9a6c100feb">
+  <link rel="stylesheet" href="vendor/katex/katex.min.css">
+  <link rel="stylesheet" href="style.css?v=057e4d9d3c">
   <script>
     // Apply the saved theme before first paint to avoid a flash.
     try {
@@ -98,7 +99,12 @@
     <!-- PODCAST: listen to the cards, one after the other -->
     <section id="view-podcast" class="view">
       <div class="panel pod-player" id="pod-player"></div>
+      <div class="panel pod-transcript-panel">
+        <div class="pod-transcript" id="pod-transcript" aria-live="off"></div>
+        <button class="btn btn-ghost small pod-follow" id="pod-follow" hidden>Theo dõi câu đang đọc</button>
+      </div>
       <div class="panel filters pod-settings" id="pod-settings"></div>
+      <div class="panel pod-neural" id="pod-neural"></div>
       <p class="muted small" id="pod-note"></p>
     </section>
 
@@ -165,7 +171,9 @@
 
   <div id="pod-mini" class="pod-mini" hidden></div>
   <div id="reel" class="reel" hidden></div>
+  <script src="vendor/katex/katex.min.js" defer></script>
+  <script src="neural.js?v=27978cf3e4"></script>
   <script src="questions.enc.js?v=5102bdd5dd"></script>
-  <script src="unlock.js?v=94d0078f12"></script>
+  <script src="unlock.js?v=20614d9fb1"></script>
 </body>
 </html>
