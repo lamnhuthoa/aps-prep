@@ -42,9 +42,15 @@ of this site (`vendor/tts/`, about 95 MB, downloaded once and kept by the browse
 
 ## Mathematics
 
-Calculations are typeset with [KaTeX][katex] (`vendor/katex/`): LaTeX between `$…$` (inline) or `$$…$$` (a line of its own), and
-plain calculations such as `Profit = 20 × 5 / 4 = 25` or `(120 − 100) / 100 × 100% = 20%`, which become fractions with × and
-%. Money such as "$5 and $10" is left alone. The podcast says a formula in words ("a divided by b", "x squared").
+Calculations are typeset with [KaTeX][katex] (`vendor/katex/`). `formula.js` is a small parser that finds the calculations written
+as plain text in the cards, such as `Net margin = 90 / 1,800 = **5%**`, `EOQ = √(2DS / H)`, `FV = 100 × 1.08⁵`,
+`P(online | returned) = 0.06 / 0.08` or `13 × 10⁹ / 250 × 10⁶`, and shows each one with fractions, roots, powers, subscripts and
+signs. Text that is not clearly a calculation is left alone ("1 reaction = 1 point", dates, money such as "$5 and $10"). LaTeX
+between `$…$` or `$$…$$`, and a code span that is a formula, are typeset too.
+
+The podcast says a calculation in words ("90 divided by 1,800 equals 5 percent"; the letters of an abbreviation one by one) and
+also the signs left between words (`=`, `−`, `×`, `±`, `Σ`, `R²`). Numbers are made safe for a Vietnamese voice (`1,800` becomes
+`1800`, `2.5` becomes "2 phẩy 5").
 
 [kokoro]: https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX
 [katex]: https://katex.org

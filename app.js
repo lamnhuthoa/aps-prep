@@ -223,54 +223,7 @@
   function escapeHtml(s) {
     return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
-  // ---------- mathematics: LaTeX between $…$ / $$…$$ and plain calculations ("10 / 5 = 2") are typeset with KaTeX ----------
-  const MATH_OPERAND = String.raw`(?:\d[\d.,]*%?|[A-Za-z](?![\w])|\([^()\n]{1,60}\))`;
-  const MATH_OPERATOR = String.raw`(?:\s*[=×÷*+−]\s*|\s+/\s+|\s+-\s+)`;
-  const MATH_BODY = `${MATH_OPERAND}(?:${MATH_OPERATOR}${MATH_OPERAND})+`;
-  const MATH_RUN = new RegExp(String.raw`(^|[^\w.,%)\]/-])(` + MATH_BODY + String.raw`)(?![\w(])`, "g");
-  // "Opportunity cost = 10 / 5": a label of up to three words, at the start of a line or after a colon
-  const MATH_LABELLED = new RegExp(String.raw`(^|:\s+)([A-Za-z][A-Za-z]*(?:\s+[A-Za-z]+){0,2})\s*=\s*(` + MATH_BODY + String.raw`)(?![\w(])`, "g");
-  const MATH_TOKENS = new RegExp(`(${MATH_OPERAND})|` + String.raw`\s*([=×÷*+−/]|-)\s*`, "g");
-  const PLACEHOLDER = /(\u0000\d+\u0000)/;
-
-  function texOperand(operand, bare) {
-    if (operand.startsWith("(") && operand.endsWith(")")) {
-      const inner = operand.slice(1, -1);
-      return bare ? arithToTex(inner) : `\\left(${arithToTex(inner)}\\right)`;
-    }
-    return operand.replace(/%/g, "\\%");
-  }
-  // "(a − b) / c = 4" → \frac{a - b}{c} = 4. A term is what stands between =, + and -: x × y / z becomes one fraction.
-  function arithToTex(expression) {
-    const tokens = [];
-    for (const m of expression.matchAll(MATH_TOKENS)) tokens.push(m[1] ? { operand: m[1] } : { op: m[2] });
-    const out = [];
-    let term = null; // tex of the term being built
-    let pendingTimes = false;
-    const flush = () => { if (term !== null) out.push(term); term = null; pendingTimes = false; };
-    for (let i = 0; i < tokens.length; i += 1) {
-      const t = tokens[i];
-      if (t.operand !== undefined) {
-        const value = texOperand(t.operand, false);
-        if (term === null) term = value;
-        else if (pendingTimes) { term += ` \\times ${value}`; pendingTimes = false; }
-        else term += value;
-      } else if (t.op === "×" || t.op === "*") {
-        pendingTimes = true;
-      } else if (t.op === "/" || t.op === "÷") {
-        const next = tokens[i + 1];
-        if (next && next.operand !== undefined && term !== null) {
-          term = `\\frac{${term.replace(/^\\left\((.*)\\right\)$/, "$1")}}{${texOperand(next.operand, true)}}`;
-          i += 1;
-        }
-      } else {
-        flush();
-        out.push(t.op === "=" ? "=" : t.op === "+" ? "+" : "-");
-      }
-    }
-    flush();
-    return out.join(" ");
-  }
+  // ---------- mathematics: LaTeX between $…$ / $$…$$ and calculations written as text (formula.js) are typeset with KaTeX ----------
   function renderMath(tex, display, fallback) {
     if (!window.katex) return escapeHtml(fallback);
     try {
@@ -278,6 +231,11 @@
     } catch (e) {
       return escapeHtml(fallback);
     }
+  }
+  // A code span that is a formula (`NPV = Σ (CFt / (1 + r)^t) − I0`) is typeset; any other stays code.
+  function codeOrMath(code) {
+    const formula = window.ApsFormula && window.ApsFormula.wholeFormula(code, {});
+    return formula ? renderMath(formula.tex, false, code) : `<code>${escapeHtml(code)}</code>`;
   }
   // Replaces the math in `text` with placeholders for the caller; `keep(html)` stores finished html and returns the placeholder.
   function stashMath(text, keep) {
@@ -288,21 +246,24 @@
       if (!block && !/[\\^_{}=<>+\-*/×÷]/.test(tex)) return whole;
       return keep(renderMath(tex, Boolean(block), whole));
     });
+    if (!window.ApsFormula) return marked;
     // placeholders are never read again as math
-    const plainOnly = (value, fn) => value.split(PLACEHOLDER).map((part, i) => (i % 2 ? part : fn(part))).join("");
-    const labelled = plainOnly(marked, (part) => part.replace(MATH_LABELLED, (whole, before, label, body) => {
-      return before + keep(renderMath(`\\text{${label}} = ${arithToTex(body)}`, false, whole.slice(before.length)));
-    }));
-    return plainOnly(labelled, (part) => part.replace(MATH_RUN, (whole, before, run) => {
-      if (!/\d/.test(run) || !/[=×÷*]|\s\/\s/.test(run)) return whole;
-      return before + keep(renderMath(arithToTex(run), false, run));
-    }));
+    return marked.split(/(\u0000\d+\u0000)/).map((part, i) => {
+      if (i % 2) return part;
+      let out = part;
+      const spans = window.ApsFormula.find(part, {});
+      for (let k = spans.length - 1; k >= 0; k -= 1) {
+        const { start, end, tex } = spans[k];
+        out = out.slice(0, start) + keep(renderMath(tex, false, part.slice(start, end))) + out.slice(end);
+      }
+      return out;
+    }).join("");
   }
 
   function inline(s) {
     const stash = [];
     const keep = (html) => { stash.push(html); return `\u0000${stash.length - 1}\u0000`; };
-    let out = s.replace(/`([^`]+)`/g, (_, c) => keep(`<code>${escapeHtml(c)}</code>`));
+    let out = s.replace(/`([^`]+)`/g, (_, c) => keep(codeOrMath(c)));
     out = escapeHtml(stashMath(out, keep))
       .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
@@ -330,6 +291,7 @@
       if (line.startsWith("|")) { flushPara(); flushList(); (table = table || []).push(line); continue; }
       flushTable();
       if (!line.trim()) { flushPara(); flushList(); continue; }
+      if (/^(?:-{3,}|\*{3,}|_{3,})$/.test(line.trim())) { flushPara(); flushList(); html.push("<hr>"); continue; }
       if (ul || ol) {
         flushPara();
         const tag = ul ? "ul" : "ol";
@@ -950,7 +912,7 @@
       const line = raw.trimEnd();
       if (line.startsWith("|")) { flushPara(); table.push(line); continue; }
       flushTable();
-      if (!line.trim()) { flushPara(); continue; }
+      if (!line.trim() || /^(?:-{3,}|\*{3,}|_{3,})$/.test(line.trim())) { flushPara(); continue; }
       if (/^\s*([-•]|\d+\.)\s+/.test(line) || line.startsWith(">")) { flushPara(); blocks.push({ text: line.trim(), whole: true }); continue; }
       if (/^\*{1,2}[A-Z][^*]{0,40}:\*{1,2}/.test(line)) flushPara();
       para.push(line.trim());
@@ -969,7 +931,7 @@
   function sentences(text) {
     const out = [];
     let start = 0;
-    for (const m of text.matchAll(/[.!?]["”)]?\s+(?=["“(*]*[A-Z0-9])/g)) {
+    for (const m of text.matchAll(/[.!?]["”)]?\s+(?=["“(*]*[\p{Lu}0-9])/gu)) {
       const end = m.index + m[0].length;
       const piece = text.slice(start, end).trim();
       const before = text.slice(start, m.index + 1);
@@ -1549,8 +1511,8 @@
   const POD_DEFAULTS = { source: "all", section: "all", order: "list", lang: "en", rate: 1, think: 3, answers: true, voiceEn: "", voiceVi: "", seed: 1, cardId: "", neural: false, neuralVoice: "af_heart", neuralOnly: false };
   const POD_MAX_CHUNK = 200; // some voices stop after about 15 seconds of one text
   const POD_TEXT = {
-    en: { question: "Question", answer: "Answer", section: "Section", percent: "percent", and: "and", columns: "Columns", atLeast: "at least", atMost: "at most", equals: "equals", over: "divided by", minus: "minus", times: "times", plus: "plus", squared: "squared", cubed: "cubed", power: "to the power of", sqrt: "square root of", approx: "approximately", notEqual: "is not equal to" },
-    vi: { question: "Câu", answer: "Đáp án", section: "Phần", percent: "phần trăm", and: "và", columns: "Các cột", atLeast: "ít nhất", atMost: "nhiều nhất", equals: "bằng", over: "chia", minus: "trừ", times: "nhân", plus: "cộng", squared: "bình phương", cubed: "lập phương", power: "mũ", sqrt: "căn bậc hai của", approx: "xấp xỉ", notEqual: "khác" },
+    en: { question: "Question", answer: "Answer", section: "Section", percent: "percent", and: "and", columns: "Columns", atLeast: "at least", atMost: "at most", equals: "equals", over: "divided by", minus: "minus", times: "times", plus: "plus", squared: "squared", cubed: "cubed", power: "to the power of", sqrt: "square root of", approx: "approximately", notEqual: "is not equal to", plusMinus: "plus or minus", sum: "the sum of", quantity: "the quantity", pctChange: "percentage change in", million: "million", thousand: "thousand", billion: "billion", per: "per", of: "of", given: "given", absolute: "the absolute value of", greater: "is greater than", less: "is less than" },
+    vi: { question: "Câu", answer: "Đáp án", section: "Phần", percent: "phần trăm", and: "và", columns: "Các cột", atLeast: "ít nhất", atMost: "nhiều nhất", equals: "bằng", over: "chia", minus: "trừ", times: "nhân", plus: "cộng", squared: "bình phương", cubed: "lập phương", power: "mũ", sqrt: "căn bậc hai của", approx: "xấp xỉ", notEqual: "khác", plusMinus: "cộng trừ", sum: "tổng của", quantity: "trong ngoặc", pctChange: "phần trăm thay đổi của", million: "triệu", thousand: "nghìn", billion: "tỷ", per: "trên", of: "của", given: "với điều kiện", absolute: "giá trị tuyệt đối của", greater: "lớn hơn", less: "nhỏ hơn" },
   };
   const pod = { list: [], lines: [], index: 0, segs: [], seg: 0, playing: false, started: false, ended: false, follow: true, run: 0, timer: null, wake: null, voices: [] };
 
@@ -1627,7 +1589,8 @@
       out.push(line);
     }
     if (table.length) out.push(spokenTable(table, W));
-    return out.join("\n")
+    const joined = out.join("\n").replace(/`([^`]+)`/g, (whole, code) => { const f = window.ApsFormula && window.ApsFormula.wholeFormula(code, W); return f ? ` ${f.say} ` : whole; });
+    return (window.ApsFormula ? window.ApsFormula.speak(joined, W) : joined)
       .replace(/\$\$([^$]+)\$\$|\$(?=[^\s$])([^$\n]*?[^\s$])\$(?!\d)/g, (whole, block, short) => (block ? ` ${texToSpeech(block, W)}. ` : /[\\^_{}=<>+\-*/×÷]/.test(short) ? ` ${texToSpeech(short, W)} ` : whole))
       .replace(/\[VERIFY[^\]]*\]/g, "")
       .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
@@ -1648,27 +1611,65 @@
       .replace(/([\d)])\s+-\s+(?=[\d(])/g, `$1 ${W.minus} `)
       .replace(/([\d)])\s*[×x*]\s*(?=[\d(])/g, `$1 ${W.times} `)
       .replace(/([\d)])\s*\+\s*(?=[\d(])/g, `$1 ${W.plus} `)
+      // the same signs between words and letters, and the rest of the signs of a calculation
+      .replace(/%Δ/g, ` ${W.pctChange} `)
+      .replace(/\|([A-Za-z])\|/g, ` ${W.absolute} $1 `)
+      .replace(/\s*=\s*/g, ` ${W.equals} `)
+      .replace(/\s\+\s|\+(?=\d)/g, ` ${W.plus} `)
+      .replace(/−/g, ` ${W.minus} `)
+      .replace(/×/g, ` ${W.times} `)
+      .replace(/÷/g, ` ${W.over} `)
+      .replace(/\)\s+\/\s+/g, `) ${W.over} `)
+      .replace(/±/g, ` ${W.plusMinus} `)
+      .replace(/≈/g, ` ${W.approx} `)
+      .replace(/≠/g, ` ${W.notEqual} `)
+      .replace(/√/g, ` ${W.sqrt} `)
+      .replace(/[Σ∑]/g, ` ${W.sum} `)
+      .replace(/\s>\s/g, ` ${W.greater} `)
+      .replace(/\s<\s/g, ` ${W.less} `)
+      .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, (m) => { const n = [...m].map((c) => "⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(c)).join(""); return n === "2" ? ` ${W.squared} ` : n === "3" ? ` ${W.cubed} ` : ` ${W.power} ${n} `; })
+      .replace(/[ΔσμπλθρΩ]/gu, (c) => " " + ({ Δ: "delta", σ: "sigma", μ: "mu", π: "pi", λ: "lambda", θ: "theta", ρ: "rho" }[c] || c) + " ")
       .replace(/[*_#]+/g, "")
       .replace(/\s+/g, " ")
       .replace(/\s+([.,;:!?])/g, "$1")
+      .replace(/,(\s*,)+/g, ",")
+      // Vietnamese writes 1.234,5; the questions use 1,234.5, which a Vietnamese voice would misread
+      .replace(/(\d)((?:,\d{3})+)(?!\d)/g, (m) => (lng === "vi" ? m.replace(/,/g, "") : m))
+      .replace(/(\d)\.(\d)/g, (m, a, b) => (lng === "vi" ? `${a} phẩy ${b}` : m))
       .trim();
   }
+  const SPLIT_AT = /[,;:–—]\s+|\s+(?=(?:and|but|or|which|because|while|whereas|so that|although|however|và|hoặc|nhưng|nên|vì|để|nếu|thì|mà|còn|nhằm|trong khi|tuy nhiên|do đó|tức là)\s)/gi;
+  // words that cannot end a piece (the rest of the phrase would be in the next one)
+  const WEAK_END = /(?:^|\s)(?:the|a|an|of|to|in|on|at|for|with|by|from|and|or|but|as|is|are|was|were|that|which|than|if|vừa|và|hoặc|của|để|cho|với|các|những|một|trong|là|thì|mà|được|có|bởi|theo|từ|tại|do|như|nhưng|khi|nếu)$/i;
+  const depthAt = (text, at) => (text.slice(0, at).match(/\(/g) || []).length - (text.slice(0, at).match(/\)/g) || []).length;
   // A sentence that is too long for one go is cut at the clause break nearest to its middle (a comma, a semicolon, a dash or a
-  // joining word), again and again until every piece fits; never inside a word.
+  // joining word), outside brackets, again and again until every piece fits; never inside a word.
   function splitLong(text) {
     if (text.length <= POD_MAX_CHUNK) return [text];
     const middle = text.length / 2;
-    const breaks = [];
-    for (const m of text.matchAll(/[,;:–—]\s+|\s+(?=(?:and|but|or|which|because|while|whereas|so that|although|however)\s)/gi)) {
+    const candidates = [];
+    for (const m of text.matchAll(SPLIT_AT)) {
       const at = m.index + (/^[,;:–—]/.test(m[0]) ? 1 : 0);
-      if (at >= 40 && at <= text.length - 40) breaks.push(at);
+      if (at < 40 || at > text.length - 40) continue;
+      if (/^,/.test(m[0]) && ABBREVIATION_END.test(text.slice(0, at - 1))) continue; // "the Co., Ltd."
+      candidates.push({ at, depth: depthAt(text, at) });
     }
-    let cut = breaks.sort((a, b) => Math.abs(a - middle) - Math.abs(b - middle))[0];
+    const nearest = (list) => list.sort((a, b) => Math.abs(a.at - middle) - Math.abs(b.at - middle))[0];
+    const central = (c) => c.at >= text.length * 0.25 && c.at <= text.length * 0.75;
+    let pick = nearest(candidates.filter((c) => c.depth === 0 && central(c))) || nearest(candidates.filter((c) => c.depth === 0)) || nearest(candidates);
+    let cut = pick && pick.at;
     if (cut === undefined) {
-      cut = text.lastIndexOf(" ", middle);
-      if (cut < 20) cut = text.indexOf(" ", middle);
+      // no clause break: a space, outside brackets and not after a function word
+      const spaces = [];
+      for (let k = 20; k < text.length - 20; k += 1) {
+        if (text[k] === " " && !WEAK_END.test(text.slice(0, k))) spaces.push({ at: k, depth: depthAt(text, k) });
+      }
+      const spare = [];
+      for (let k = 20; k < text.length - 20; k += 1) if (text[k] === " ") spare.push({ at: k, depth: depthAt(text, k) });
+      pick = nearest(spaces.filter((c) => c.depth === 0)) || nearest(spaces) || nearest(spare);
+      cut = pick && pick.at;
     }
-    if (cut <= 0 || cut >= text.length) return [text];
+    if (cut === undefined || cut <= 0 || cut >= text.length) return [text];
     return [...splitLong(text.slice(0, cut).trim()), ...splitLong(text.slice(cut).trim())];
   }
   // The text as pieces that a voice can read in one go: the sentences of answerChunks(), cut further only when long.
