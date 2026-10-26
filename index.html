@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon.svg">
   <link rel="icon" href="icon.svg">
   <link rel="stylesheet" href="vendor/katex/katex.min.css">
-  <link rel="stylesheet" href="style.css?v=057e4d9d3c">
+  <link rel="stylesheet" href="style.css?v=71e73ba05d">
   <script>
     // Apply the saved theme before first paint to avoid a flash.
     try {
@@ -73,6 +73,9 @@
         </div>
       </div>
 
+      <div class="panel plan-panel" id="study-plan" hidden></div>
+      <div class="panel recall-panel" id="error-recall" hidden></div>
+
       <div class="panel">
         <div class="panel-head">
           <h3>12 tuần gần nhất</h3>
@@ -117,6 +120,9 @@
         <label>Phần
           <select id="f-section"></select>
         </label>
+        <label title="APS không công bố đề. Báo cáo thật = câu từng được hỏi trong các buổi thi đã được kể lại; Bài chia sẻ = chủ đề lấy từ bài viết của thí sinh; Tự soạn = ta tự viết từ bảng điểm và luận văn.">Nguồn gốc
+          <select id="f-prov"></select>
+        </label>
         <label>Chế độ
           <select id="f-mode">
             <option value="due">Đến hạn + mới</option>
@@ -149,6 +155,7 @@
         </div>
         <div id="progress-list"></div>
       </div>
+      <div id="error-stats"></div>
       <div id="mock-history"></div>
       <div class="panel settings">
         <h3>Cài đặt và sao lưu</h3>
@@ -174,7 +181,8 @@
   <script src="vendor/katex/katex.min.js" defer></script>
   <script src="formula.js?v=dc04b3d941"></script>
   <script src="neural.js?v=27978cf3e4"></script>
+  <script src="study_plan.js?v=e40dac07d2"></script>
   <script src="questions.enc.js?v=5102bdd5dd"></script>
-  <script src="unlock.js?v=38e7a83257"></script>
+  <script src="unlock.js?v=61b0791dd3"></script>
 </body>
 </html>

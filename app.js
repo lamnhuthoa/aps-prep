@@ -13,6 +13,26 @@
   const REVIEW_ONLY_DAYS = 3;
   const DEVICE_KEY = "aps-prep-device";
 
+  // Daily study plan (study_plan.js, generated from study_plan.json by build.py).
+  const PLAN = (window.STUDY_PLAN || []).slice().sort((a, b) => a.date.localeCompare(b.date));
+  // A card belongs to the first plan day that lists it; PLAN_ORDER keeps the order inside the whole plan.
+  const PLAN_DAY_OF = {};
+  const PLAN_ORDER = {};
+  PLAN.forEach((day) => [...day.learn, ...day.calc].forEach((id) => {
+    if (!(id in PLAN_DAY_OF)) { PLAN_DAY_OF[id] = day.date; PLAN_ORDER[id] = Object.keys(PLAN_ORDER).length; }
+  }));
+  // Where a question comes from. APS publishes no question bank, so the label matters.
+  const PROV_LABEL = { "candidate-report": "Báo cáo thật", "candidate-write-up": "Bài chia sẻ", prep: "Tự soạn" };
+  // Why an answer was wrong, chosen on the card before grading it "Chưa thuộc" or "Tạm".
+  const ERROR_REASONS = [
+    ["knowledge", "Quên khái niệm"],
+    ["formula", "Quên công thức"],
+    ["application", "Biết nhưng không áp dụng được"],
+    ["language", "Khó diễn đạt tiếng Anh"],
+    ["careless", "Bất cẩn"],
+  ];
+  const REASON_LABEL = Object.fromEntries(ERROR_REASONS);
+
   // ---------- icons: Lucide (https://lucide.dev, ISC licence), inlined so the app works offline ----------
   const ICONS = {
     check: '<path d="M20 6 9 17l-5-5"/>',
@@ -138,9 +158,29 @@
     for (const c of CARDS) { seen[c.source] = (seen[c.source] || 0) + 1; pos[c.id] = seen[c.source] / total[c.source]; }
     return pos;
   })();
+  // The study plan comes first: today's cards, then cards of earlier plan days that were missed,
+  // then cards the plan does not name, then cards planned for later days (soonest first).
+  function planRank(card) {
+    const when = PLAN_DAY_OF[card.id];
+    if (!when) return 0;
+    const key = today();
+    return when === key ? -2 : when < key ? -1 : 1;
+  }
   function freshOrdered(pool) {
     return pool.filter((c) => !state.cards[c.id])
-      .sort((a, b) => newPriority(a) - newPriority(b) || (newPriority(a) === 2 ? SOURCE_POS[a.id] - SOURCE_POS[b.id] : 0));
+      .sort((a, b) => planRank(a) - planRank(b)
+        || (planRank(a) !== 0 ? PLAN_ORDER[a.id] - PLAN_ORDER[b.id] : 0)
+        || newPriority(a) - newPriority(b)
+        || (newPriority(a) === 2 ? SOURCE_POS[a.id] - SOURCE_POS[b.id] : 0));
+  }
+  // New cards the plan asks for today: its own cards that are still unseen, plus a few missed ones.
+  function planNeed() {
+    if (!PLAN.length) return 0;
+    const key = today();
+    const fresh = CARDS.filter((c) => !state.cards[c.id] && PLAN_DAY_OF[c.id]);
+    const own = fresh.filter((c) => PLAN_DAY_OF[c.id] === key).length;
+    const missed = fresh.filter((c) => PLAN_DAY_OF[c.id] < key).length;
+    return own + Math.min(missed, 6);
   }
   // How many new cards to learn today so that every card has been seen before the review-only days.
   function pace() {
@@ -150,7 +190,8 @@
     const stop = lastNewDay();
     const reviewOnly = key > stop;
     const daysLeft = reviewOnly ? 0 : daysBetween(key, stop) + 1;
-    const quota = reviewOnly ? 0 : Math.ceil((fresh + seenToday) / daysLeft);
+    // At least the pace needed to see every card in time, and at least what today's plan asks for.
+    const quota = reviewOnly ? 0 : Math.max(Math.ceil((fresh + seenToday) / daysLeft), seenToday + planNeed());
     return { fresh, seenToday, quota, daysLeft, stop, reviewOnly, newLeft: Math.max(0, Math.min(fresh, quota - seenToday)) };
   }
   function todayPlan() {
@@ -169,11 +210,19 @@
   }
 
   // grade: 0 = Chưa thuộc, 1 = Tạm, 2 = Thuộc
-  function gradeCard(id, grade) {
+  function gradeCard(id, grade, reason) {
     const key = today();
     const isNew = !state.cards[id];
     const rec = state.cards[id] || { box: 0, due: key, reviews: 0, lapses: 0 };
     const firstToday = rec.last !== key;
+    // Error log: one entry per day for a card answered wrong or shakily, with the reason if given.
+    if (grade < 2) {
+      const errs = rec.errs || (rec.errs = []);
+      const lastErr = errs[errs.length - 1];
+      if (lastErr && lastErr.d === key) { if (reason) lastErr.r = reason; }
+      else errs.push({ d: key, r: reason || null });
+      if (errs.length > 12) errs.splice(0, errs.length - 12);
+    }
     if (grade === 0) {
       rec.box = 0;
       rec.lapses += 1;
@@ -545,6 +594,8 @@
     $("#goal-text").textContent = `Hôm nay: ${day.reviewed} / ${plan.target} thẻ (${day.newSeen} thẻ mới) · ${day.good} thẻ "Thuộc"`;
 
     renderHeatmap();
+    renderStudyPlan();
+    renderErrorRecall();
 
     const fmt = (k) => k.split("-").reverse().slice(0, 2).join("/");
     const paceLine = plan.reviewOnly
@@ -554,7 +605,7 @@
     $("#queue-summary").innerHTML = `
       <li><b>${plan.dueUnseen}</b> thẻ đến hạn ôn lại</li>
       ${paceLine}
-      <li class="muted small">Thứ tự thẻ mới: câu từ các buổi phỏng vấn thật (Section 12), rồi câu ${STAR}, rồi các phần còn lại xen kẽ. Lần ôn nào rơi sau ngày thi được dời vào ${REVIEW_ONLY_DAYS} ngày cuối (${fmt(addDays(examDate, -REVIEW_ONLY_DAYS))}–${fmt(addDays(examDate, -1))}) để thẻ nào cũng được ôn lại trước khi thi.</li>`;
+      <li class="muted small">Thứ tự thẻ mới: ${PLAN.length ? "thẻ của kế hoạch hôm nay, thẻ kế hoạch những ngày trước còn bỏ sót, thẻ chưa có trong kế hoạch, rồi thẻ của các ngày sau. Ngoài kế hoạch: " : ""}câu từ các buổi phỏng vấn thật (Section 12), rồi câu ${STAR}, rồi các phần còn lại xen kẽ. Lần ôn nào rơi sau ngày thi được dời vào ${REVIEW_ONLY_DAYS} ngày cuối (${fmt(addDays(examDate, -REVIEW_ONLY_DAYS))}–${fmt(addDays(examDate, -1))}) để thẻ nào cũng được ôn lại trước khi thi.</li>`;
 
     const weak = Object.entries(state.cards).filter(([id, r]) => r.lapses > 0 && BY_ID[id])
       .sort((a, b) => b[1].lapses - a[1].lapses || a[1].box - b[1].box).slice(0, 5);
@@ -566,6 +617,113 @@
       showView("practice");
       startPractice([BY_ID[b.dataset.id]]);
     }));
+  }
+
+  // ---------- study plan and error review (Hôm nay) ----------
+  function studyDay(key) { return PLAN.find((d) => d.date === key) || null; }
+  const fmtDate = (k) => k.split("-").reverse().slice(0, 2).join("/");
+  const CHIP_PREFIX = { thesis: "LV ", personal: "Về bạn " };
+  function chipLabel(card) { return (CHIP_PREFIX[card.source] || "") + card.num.replace(/\s*\[.*\]$/, ""); }
+  function chipHtml(card) {
+    const rec = state.cards[card.id];
+    const tone = rec && rec.lastGrade === 0 ? " wrong" : "";
+    return `<button class="plan-chip ${cardStatus(card.id)}${tone}" data-id="${escapeHtml(card.id)}" title="${escapeHtml(card.question.split("\n")[0].slice(0, 120))}">${escapeHtml(chipLabel(card))}</button>`;
+  }
+  // Open a queue in the practice view with the filters reset.
+  function openQueue(queue) {
+    showView("practice");
+    $("#f-source").value = "all"; fillSections(); $("#f-prov").value = "all"; $("#f-mode").value = "due"; $("#f-star").checked = false;
+    startPractice(queue);
+  }
+  // Today's planned cards that still need work (new, shaky or due); everything when all are done.
+  function planQueue(day) {
+    const key = today();
+    const cards = [...day.learn, ...day.calc].map((id) => BY_ID[id]).filter(Boolean);
+    const open = cards.filter((c) => { const r = state.cards[c.id]; return !r || r.lastGrade < 2 || isDue(c.id, key); });
+    return open.length ? open : cards;
+  }
+  // Red and yellow cards (last answered "Chưa thuộc" or "Tạm") of the plan day's review sections.
+  function reviewQueue(day) {
+    const sections = day.reviewSections || [];
+    const all = sections.includes("all");
+    return CARDS.filter((c) => {
+      const r = state.cards[c.id];
+      return r && r.lastGrade < 2 && (all || (c.source === "subject" && sections.includes(parseInt(c.section, 10))));
+    }).sort((a, b) => state.cards[b.id].lapses - state.cards[a.id].lapses || state.cards[a.id].box - state.cards[b.id].box);
+  }
+  function renderStudyPlan() {
+    const box = $("#study-plan");
+    const key = today();
+    const day = studyDay(key);
+    if (!PLAN.length || (!day && key > PLAN[PLAN.length - 1].date)) { box.hidden = true; return; }
+    box.hidden = false;
+    const next = PLAN.find((d) => d.date > key);
+    if (!day) {
+      box.innerHTML = `<h3>Kế hoạch ôn</h3><p class="muted">${next ? `Kế hoạch bắt đầu ngày ${fmtDate(next.date)}: ${escapeHtml(next.title)}.` : "Hôm nay không có mục nào trong kế hoạch."}</p>`;
+      return;
+    }
+    const cardsOf = (ids) => ids.map((id) => BY_ID[id]).filter(Boolean);
+    const learn = cardsOf(day.learn), calc = cardsOf(day.calc), speak = cardsOf(day.speak);
+    const planned = [...learn, ...calc];
+    const doneToday = planned.filter((c) => state.cards[c.id] && state.cards[c.id].last === key).length;
+    const missed = CARDS.filter((c) => PLAN_DAY_OF[c.id] && PLAN_DAY_OF[c.id] < key && !state.cards[c.id]).length;
+    const review = day.reviewSections ? reviewQueue(day).length : 0;
+    const group = (title, cards) => cards.length ? `<div class="plan-group"><span class="plan-group-title">${title}</span>${cards.map(chipHtml).join("")}</div>` : "";
+    box.innerHTML = `
+      <div class="panel-head">
+        <h3>Kế hoạch hôm nay · ${fmtDate(key)} · ${day.hours ? `${day.hours} giờ` : "ngày thi"}</h3>
+        ${planned.length ? `<span class="muted small">${doneToday} / ${planned.length} thẻ kế hoạch đã làm hôm nay</span>` : ""}
+      </div>
+      <p><b>${escapeHtml(day.title)}</b></p>
+      ${day.note ? `<p class="muted small">${escapeHtml(day.note)}</p>` : ""}
+      ${group("Học", learn)}${group("Tính toán", calc)}${group("Nói to 2 phút", speak)}
+      ${missed ? `<p class="muted small">Còn ${missed} thẻ của các ngày trước chưa học: app sẽ xếp một vài thẻ vào buổi hôm nay.</p>` : ""}
+      <div class="plan-actions">
+        ${planned.length ? `<button class="btn btn-primary" id="plan-start">Học theo kế hoạch hôm nay</button>` : ""}
+        ${speak.length ? `<button class="btn btn-ghost" id="plan-speak">Luyện nói ${speak.length} câu</button>` : ""}
+        ${day.reviewSections ? `<button class="btn btn-ghost" id="plan-review"${review ? "" : " disabled"}>Ôn câu đỏ/vàng (${review})</button>` : ""}
+        ${day.mock ? `<button class="btn btn-ghost" id="plan-mock">Vào Thi thử</button>` : ""}
+      </div>
+      ${next ? `<p class="muted small">Tiếp theo, ${fmtDate(next.date)}: ${escapeHtml(next.title)}</p>` : ""}`;
+    box.querySelectorAll(".plan-chip").forEach((b) => b.addEventListener("click", () => openQueue([BY_ID[b.dataset.id]])));
+    const on = (id, fn) => { const b = box.querySelector(id); if (b) b.addEventListener("click", fn); };
+    on("#plan-start", () => openQueue(planQueue(day)));
+    on("#plan-speak", () => openQueue(speak));
+    on("#plan-review", () => openQueue(reviewQueue(day)));
+    on("#plan-mock", () => showView("mock"));
+  }
+  // Active recall of mistakes: cards answered wrong or shakily yesterday and three days ago.
+  function errorRecallQueue() {
+    const key = today();
+    const days = [addDays(key, -1), addDays(key, -3)];
+    return CARDS.filter((c) => {
+      const r = state.cards[c.id];
+      if (!r || !r.errs || !r.errs.some((e) => days.includes(e.d))) return false;
+      return !(r.last === key && r.lastGrade === 2);
+    });
+  }
+  function renderErrorRecall() {
+    const box = $("#error-recall");
+    const any = Object.values(state.cards).some((r) => r.errs && r.errs.length);
+    box.hidden = !any;
+    if (!any) return;
+    const key = today();
+    const days = [addDays(key, -1), addDays(key, -3)];
+    const queue = errorRecallQueue();
+    if (!queue.length) {
+      box.innerHTML = `<h3>Nhớ lại lỗi của hôm qua</h3><p class="muted">Không có câu sai hoặc "Tạm" của hôm qua hay 3 ngày trước cần nhớ lại. ${icon("check")}</p>`;
+      return;
+    }
+    const tally = {};
+    for (const c of queue) {
+      const e = state.cards[c.id].errs.filter((x) => days.includes(x.d)).pop();
+      const label = REASON_LABEL[e.r] || "chưa ghi lý do";
+      tally[label] = (tally[label] || 0) + 1;
+    }
+    box.innerHTML = `
+      <div class="panel-head"><h3>Nhớ lại lỗi (15 phút đầu buổi học)</h3><button class="btn btn-primary" id="recall-start">Bắt đầu (${queue.length} câu)</button></div>
+      <p class="muted small">Câu sai hoặc "Tạm" hôm qua và 3 ngày trước. Trả lời không nhìn ghi chú rồi mới xem đáp án. Lý do: ${Object.entries(tally).map(([l, n]) => `${escapeHtml(l)} (${n})`).join(", ")}.</p>`;
+    $("#recall-start").addEventListener("click", () => openQueue(errorRecallQueue()));
   }
 
   function renderHeatmap() {
@@ -601,7 +759,7 @@
           `<span class="progress-name">${escapeHtml(section)}</span><span class="progress-n muted small">${cnt.mastered}/${cnt.total}</span>${bar(cnt)}`);
         row.addEventListener("click", () => {
           showView("practice");
-          $("#f-source").value = src; fillSections(); $("#f-section").value = section; $("#f-mode").value = "due";
+          $("#f-source").value = src; fillSections(); $("#f-section").value = section; $("#f-prov").value = "all"; $("#f-mode").value = "due";
           startPractice();
         });
         list.appendChild(row);
@@ -610,6 +768,27 @@
     $("#s-exam").value = state.settings.examDate;
     $("#s-goal").value = state.settings.dailyGoal;
     $("#mock-history").innerHTML = mockHistoryHtml(30) || '<div class="panel"><h3>Lịch sử thi thử</h3><p class="muted">Chưa có lần thi thử nào. Kết quả được lưu khi bạn làm xong phần nói.</p></div>';
+    renderErrorStats();
+  }
+  // Why answers were wrong: counts of the reasons logged on cards, with a shortcut to practise each kind.
+  function renderErrorStats() {
+    const box = $("#error-stats");
+    const tally = {};
+    let total = 0;
+    for (const [id, r] of Object.entries(state.cards)) {
+      if (!BY_ID[id] || !r.errs) continue;
+      for (const e of r.errs) { const k = e.r || "none"; tally[k] = (tally[k] || 0) + 1; total += 1; }
+    }
+    if (!total) { box.innerHTML = ""; return; }
+    const rows = [...ERROR_REASONS, ["none", "Chưa ghi lý do"]].filter(([k]) => tally[k]).map(([k, label]) =>
+      `<tr><td>${escapeHtml(label)}</td><td><b>${tally[k]}</b></td><td>${k === "none" ? "" : `<button class="btn btn-ghost small" data-reason="${k}">Luyện các câu này</button>`}</td></tr>`).join("");
+    box.innerHTML = `<div class="panel"><h3>Loại lỗi (${total} lần ghi nhận)</h3>
+      <div class="table-wrap"><table class="mock-history"><thead><tr><th>Lý do</th><th>Số lần</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+      <p class="muted small">Chọn lý do trên thẻ trước khi bấm "Chưa thuộc" hoặc "Tạm". Quên khái niệm thì học lại; quên công thức thì viết tay; không áp dụng được thì làm thêm bài tính; khó diễn đạt thì nói to bằng tiếng Anh.</p></div>`;
+    box.querySelectorAll("button[data-reason]").forEach((b) => b.addEventListener("click", () => {
+      const k = b.dataset.reason;
+      openQueue(CARDS.filter((c) => { const r = state.cards[c.id]; return r && r.errs && r.errs.some((e) => e.r === k) && cardStatus(c.id) !== "mastered"; }));
+    }));
   }
   function bar(c) {
     const pct = (n) => (c.total ? (n / c.total) * 100 : 0);
@@ -625,6 +804,12 @@
       SOURCE_ORDER.filter((s) => CARDS.some((c) => c.source === s))
         .map((s) => `<option value="${s}">${sourceLabel(s)} (${CARDS.filter((c) => c.source === s).length})</option>`).join("");
   }
+  function fillProv() {
+    const sel = $("#f-prov");
+    const kinds = Object.keys(PROV_LABEL).filter((k) => CARDS.some((c) => c.provenance === k));
+    sel.innerHTML = `<option value="all">Tất cả</option>` +
+      kinds.map((k) => `<option value="${k}">${PROV_LABEL[k]} (${CARDS.filter((c) => c.provenance === k).length})</option>`).join("");
+  }
   // Section 4 of the reported guide became the "About you" cards; the menu points there.
   const SECTION_POINTERS = { reported: { number: 4, source: "personal", title: "Interview questions about you" } };
   function fillSections() {
@@ -639,9 +824,10 @@
     $("#f-section").innerHTML = `<option value="all">Tất cả</option>` + options.join("");
   }
 
-  function buildQueue({ source = "all", section = "all", mode = "due", starOnly = false, limit = Infinity }) {
+  function buildQueue({ source = "all", section = "all", prov = "all", mode = "due", starOnly = false, limit = Infinity }) {
     const key = today();
-    let pool = CARDS.filter((c) => (source === "all" || c.source === source) && (section === "all" || c.section === section) && (!starOnly || c.star));
+    let pool = CARDS.filter((c) => (source === "all" || c.source === source) && (section === "all" || c.section === section)
+      && (prov === "all" || c.provenance === prov) && (!starOnly || c.star));
     if (mode === "random") return shuffle(pool).slice(0, limit);
     if (mode === "new") return freshOrdered(pool).slice(0, limit);
     // Cards whose last grade was Tạm and/or Thuộc, least secure first.
@@ -669,7 +855,7 @@
 
   function startPractice(queue) {
     const q = queue || buildQueue({
-      source: $("#f-source").value, section: $("#f-section").value,
+      source: $("#f-source").value, section: $("#f-section").value, prov: $("#f-prov").value,
       mode: $("#f-mode").value, starOnly: $("#f-star").checked,
     });
     session = { queue: q, index: 0, revealed: false, done: 0, again: [], tally: [0, 0, 0] };
@@ -700,28 +886,40 @@
     if (st && mcqDone(st)) session.revealed = true;
     // With a draft, the revealed answer is shown side by side with it, as in the mock exam review.
     const compare = !st && session.revealed && (session.draft || "").trim();
-    const draftHtml = `
-        <details class="draft"${session.draft ? " open" : ""}><summary>Viết nháp câu trả lời (luyện phần thi viết, có so với đáp án)</summary>
-          <textarea placeholder="Gõ hoặc bấm Đọc để nhập, rồi bấm Kiểm tra…">${escapeHtml(session.draft || "")}</textarea>
-          ${session.revealed ? "" : `<div class="draft-tools">
+    // The draft box and its tools stay available after the answer is revealed: you can still type or
+    // dictate ("Đọc để nhập") and press "Cập nhật so sánh" to compare the new text with the model answer.
+    const draftZone = (value) => `<div class="draft-zone">
+          <textarea placeholder="${session.revealed ? "Gõ hoặc bấm Đọc để nhập câu trả lời của bạn, rồi bấm Cập nhật so sánh…" : "Gõ hoặc bấm Đọc để nhập, rồi bấm Kiểm tra…"}">${escapeHtml(value)}</textarea>
+          <div class="draft-tools">
             ${SpeechRec ? `<button class="btn btn-ghost small" id="btn-dictate">${icon("mic")} Đọc để nhập</button>` : ""}
-            <button class="btn btn-ghost small" id="btn-check">Kiểm tra bài viết</button>
+            <button class="btn btn-ghost small" id="btn-check">${session.revealed ? "Cập nhật so sánh" : "Kiểm tra bài viết"}</button>
             <span class="muted small" id="dictate-status"></span>
           </div>
-          ${SpeechRec ? '<p class="muted small">Đọc để nhập dùng nhận dạng giọng nói của trình duyệt, tiếng Anh, cần internet. Chrome gửi âm thanh lên máy chủ Google, Safari gửi lên Apple.</p>' : ""}`}
+          ${SpeechRec ? '<p class="muted small">Đọc để nhập dùng nhận dạng giọng nói của trình duyệt, tiếng Anh, cần internet. Chrome gửi âm thanh lên máy chủ Google, Safari gửi lên Apple.</p>' : ""}
+        </div>`;
+    const draftHtml = `
+        <details class="draft"${session.draft || session.revealed ? " open" : ""}><summary>${session.revealed ? "Bài của bạn (gõ hoặc đọc để nhập, rồi so với đáp án mẫu)" : "Viết nháp câu trả lời (luyện phần thi viết, có so với đáp án)"}</summary>
+          ${draftZone(session.draft || "")}
         </details>`;
+    const lastErr = rec && rec.errs && rec.errs[rec.errs.length - 1];
+    const errText = lastErr ? ` · sai gần nhất ${fmtDate(lastErr.d)}${lastErr.r ? ` (${REASON_LABEL[lastErr.r]})` : ""}` : "";
+    const reasonHtml = session.revealed
+      ? `<div class="reasons"><span class="muted small">Nếu chưa đúng, vì sao? Chọn rồi bấm "Chưa thuộc" hoặc "Tạm":</span>${ERROR_REASONS.map(([k, label], i) =>
+          `<button class="chip reason${session.reason === k ? " active" : ""}" data-r="${k}">${label}<kbd>${i + 4}</kbd></button>`).join("")}</div>`
+      : "";
     area.innerHTML = `
       <div class="session-bar"><span>${session.index + 1} / ${session.queue.length}</span><div class="goal-bar"><div class="goal-fill" style="width:${(session.index / session.queue.length) * 100}%"></div></div></div>
       <article class="panel card">
-        <div class="card-meta"><span class="tag">${card.sourceLabel} ${escapeHtml(card.num)}</span>${card.star ? `<span class="tag star">${STAR}</span>` : ""}<span class="muted small">${escapeHtml(card.section)}${card.subsection ? " · " + escapeHtml(card.subsection) : ""}</span><span class="muted small right">${statusText}</span></div>
+        <div class="card-meta"><span class="tag">${card.sourceLabel} ${escapeHtml(card.num)}</span>${card.star ? `<span class="tag star">${STAR}</span>` : ""}${card.provenance ? `<span class="tag prov prov-${card.provenance}" title="APS không công bố đề: nhãn này cho biết câu hỏi từ đâu">${PROV_LABEL[card.provenance]}</span>` : ""}<span class="muted small">${escapeHtml(card.section)}${card.subsection ? " · " + escapeHtml(card.subsection) : ""}</span><span class="muted small right">${statusText}${errText}</span></div>
         ${questionHtml(card)}
         ${compare
           ? `<div class="compare">
-              <div><h4>Bài của bạn</h4><div class="mine">${escapeHtml(session.draft).replace(/\n/g, "<br>")}</div></div>
+              <div><h4>Bài của bạn</h4>${draftZone(session.draft)}</div>
               <div><h4>Đáp án mẫu</h4>${answerHtml(card, false)}</div>
             </div>`
           : `${st ? mcqHtml(card, st, session.revealed) : draftHtml}${answerHtml(card, !session.revealed)}`}
         <div class="feedback"></div>
+        ${reasonHtml}
         <div class="card-actions">
           ${session.revealed
             ? gradeButtons(st ? mcqSuggest(st) : null)
@@ -733,19 +931,29 @@
       if (session.draft && lang() === "vi") area.querySelectorAll("details.en-original").forEach((d) => (d.open = true));
       attachFeedback(area.querySelector(".card"), card, session.draft || "");
       area.querySelectorAll(".grade").forEach((b) => b.addEventListener("click", () => grade(Number(b.dataset.g))));
+      area.querySelectorAll(".reason").forEach((b) => b.addEventListener("click", () => setReason(b.dataset.r)));
     } else {
       $("#btn-reveal").addEventListener("click", reveal);
-      $("#btn-skip").addEventListener("click", () => { session.index += 1; session.draft = ""; session.mcq = null; renderCard(); });
+      $("#btn-skip").addEventListener("click", () => { session.index += 1; session.draft = ""; session.mcq = null; session.reason = null; renderCard(); });
       if (st) { bindMcq(area, card, st, renderCard); return; }
-      const textarea = area.querySelector("details.draft textarea");
-      const status = $("#dictate-status");
-      $("#btn-check").addEventListener("click", () => {
-        if (!textarea.value.trim()) { status.textContent = "Viết hoặc đọc câu trả lời trước đã."; textarea.focus(); return; }
-        reveal();
-      });
-      const dictate = $("#btn-dictate");
-      if (dictate) dictate.addEventListener("click", () => (dictation ? stopDictation() : startDictation(textarea, dictate, status)));
     }
+    if (st) return;
+    // Draft box: before the reveal "Kiểm tra" reveals the answer; after it, "Cập nhật so sánh" compares again.
+    const textarea = area.querySelector(".draft-zone textarea");
+    const status = $("#dictate-status");
+    $("#btn-check").addEventListener("click", () => {
+      if (!textarea.value.trim()) { status.textContent = "Viết hoặc đọc câu trả lời trước đã."; textarea.focus(); return; }
+      if (session.revealed) { stopDictation(); session.draft = textarea.value; renderCard(); }
+      else reveal();
+    });
+    const dictate = $("#btn-dictate");
+    if (dictate) dictate.addEventListener("click", () => (dictation ? stopDictation() : startDictation(textarea, dictate, status)));
+  }
+  // Choose why the answer was wrong; it is saved with the grade when that grade is "Chưa thuộc" or "Tạm".
+  function setReason(key) {
+    if (!session) return;
+    session.reason = session.reason === key ? null : key;
+    document.querySelectorAll("#practice-area .reason").forEach((b) => b.classList.toggle("active", b.dataset.r === session.reason));
   }
 
   // ---------- speech to text for the draft (Web Speech API; Chrome, Edge and Safari) ----------
@@ -804,7 +1012,7 @@
   }
   function grade(g) {
     const card = session.queue[session.index];
-    gradeCard(card.id, g);
+    gradeCard(card.id, g, g < 2 ? session.reason : null);
     session.tally[g] += 1;
     session.done += 1;
     if (g === 0) session.again.push(card);
@@ -812,6 +1020,7 @@
     session.revealed = false;
     session.draft = "";
     session.mcq = null;
+    session.reason = null;
     renderCard();
   }
 
@@ -1366,19 +1575,19 @@
   $("#btn-checkin").addEventListener("click", () => { checkIn(); renderToday(); });
   $("#btn-start-today").addEventListener("click", () => {
     showView("practice");
-    $("#f-source").value = "all"; fillSections(); $("#f-mode").value = "due"; $("#f-star").checked = false;
+    $("#f-source").value = "all"; fillSections(); $("#f-prov").value = "all"; $("#f-mode").value = "due"; $("#f-star").checked = false;
     startPractice(todayQueue());
   });
   $("#btn-reel-today").addEventListener("click", () => openReel(todayQueue));
   $("#btn-reel").addEventListener("click", () => {
-    const filters = { source: $("#f-source").value, section: $("#f-section").value, mode: $("#f-mode").value, starOnly: $("#f-star").checked };
+    const filters = { source: $("#f-source").value, section: $("#f-section").value, prov: $("#f-prov").value, mode: $("#f-mode").value, starOnly: $("#f-star").checked };
     // Random mode is drawn once, so "Lướt tiếp" continues through the same shuffled order.
     const fixed = filters.mode === "random" ? buildQueue(filters) : null;
     openReel(() => fixed || buildQueue(filters));
   });
   $("#btn-weak-all").addEventListener("click", () => {
     showView("practice");
-    $("#f-source").value = "all"; fillSections(); $("#f-mode").value = "weak"; $("#f-star").checked = false;
+    $("#f-source").value = "all"; fillSections(); $("#f-prov").value = "all"; $("#f-mode").value = "weak"; $("#f-star").checked = false;
     startPractice();
   });
   $("#f-source").addEventListener("change", fillSections);
@@ -1404,8 +1613,8 @@
     document.querySelectorAll(".lang-btn").forEach((b) => b.classList.toggle("active", b.dataset.lang === lang()));
   }
   document.querySelectorAll(".lang-btn").forEach((b) => b.addEventListener("click", () => {
-    const draft = document.querySelector("#practice-area details.draft textarea");
-    if (session && draft && !session.revealed) session.draft = draft.value;
+    const draft = document.querySelector("#practice-area .draft-zone textarea");
+    if (session && draft) session.draft = draft.value;
     if (mock && mock.phase === "written") document.querySelectorAll("#mock-area textarea[data-i]").forEach((t) => (mock.answers[Number(t.dataset.i)] = t.value));
     state.settings.lang = b.dataset.lang;
     save();
@@ -1423,6 +1632,7 @@
       if (card && session.mcq && !session.revealed && /^[a-d]$/i.test(e.key) && mcqKey(card, session.mcq, e.key)) { renderCard(); return; }
       if (e.code === "Space" && !session.revealed && session.index < session.queue.length) { e.preventDefault(); reveal(); }
       else if (session.revealed && ["1", "2", "3"].includes(e.key)) grade(Number(e.key) - 1);
+      else if (session.revealed && /^[4-8]$/.test(e.key)) setReason(ERROR_REASONS[Number(e.key) - 4][0]);
     } else if (currentView === "podcast") {
       if (e.target.closest("button")) return; // a focused button handles Space itself
       if (e.code === "Space") { e.preventDefault(); podToggle(); }
@@ -1452,6 +1662,10 @@
       const pick = newer ? { ...theirs } : mine;
       pick.reviews = Math.max(mine.reviews || 0, theirs.reviews || 0);
       pick.lapses = Math.max(mine.lapses || 0, theirs.lapses || 0);
+      // Error log: union of both devices, one entry per day (a reason from either side is kept).
+      const byDay = new Map();
+      for (const e of [...(mine.errs || []), ...(theirs.errs || [])]) byDay.set(e.d, { d: e.d, r: e.r || (byDay.get(e.d) || {}).r || null });
+      if (byDay.size) pick.errs = [...byDay.values()].sort((a, b) => a.d.localeCompare(b.d)).slice(-12);
       state.cards[id] = pick;
       if (newer) result.cards += 1;
     }
@@ -2210,6 +2424,7 @@
   applyTheme();
   syncLangButtons();
   fillSources();
+  fillProv();
   fillSections();
   renderCard();
   $("#foot").textContent = CARDS.length
