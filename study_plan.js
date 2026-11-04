@@ -292,7 +292,11 @@ window.STUDY_PLAN = [
    "subject-Q128",
    "subject-Q129",
    "subject-Q130",
-   "subject-Q131"
+   "subject-Q131",
+   "subject-Q146",
+   "subject-Q147",
+   "subject-Q148",
+   "subject-Q149"
   ],
   "calc": [],
   "speak": [
@@ -316,7 +320,9 @@ window.STUDY_PLAN = [
    "subject-Q141",
    "subject-Q142",
    "subject-Q143",
-   "subject-Q144"
+   "subject-Q144",
+   "subject-Q150",
+   "subject-Q151"
   ],
   "calc": [],
   "speak": [
