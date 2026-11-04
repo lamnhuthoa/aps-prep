@@ -129,7 +129,10 @@
   function cardStatus(id) {
     const rec = state.cards[id];
     if (!rec) return "new";
-    return rec.box >= MASTERED_BOX ? "mastered" : "learning";
+    // "Đã thuộc" counts the whole history: a card is known when the latest answer to it was "Thuộc".
+    // The box only schedules the next review. (Records without lastGrade fall back to the box.)
+    const known = rec.lastGrade === undefined ? rec.box >= MASTERED_BOX : rec.lastGrade === 2;
+    return known ? "mastered" : "learning";
   }
 
   // ---------- pacing towards the exam ----------
