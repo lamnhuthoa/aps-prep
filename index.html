@@ -170,6 +170,14 @@
           <label class="btn btn-ghost file-btn"><i data-icon="upload"></i> Nhập backup<input type="file" id="file-import" accept="application/json"></label>
           <button class="btn btn-danger" id="btn-reset">Xóa toàn bộ tiến độ</button>
         </div>
+        <h3 class="sync-title">Đồng bộ sang máy khác</h3>
+        <p class="muted small">Không cần chuyển file: bấm <b>Sao chép mã đồng bộ</b> trên máy này, gửi mã cho chính bạn (Zalo, Messenger, ghi chú, email), rồi dán vào ô bên dưới trên máy kia và bấm <b>Gộp mã</b>. Mã chỉ chứa tiến độ học (không có nội dung câu hỏi). Gộp nhiều lần vẫn an toàn: mỗi thẻ giữ lần ôn mới nhất từ hai bên.</p>
+        <div class="settings-row">
+          <button class="btn btn-ghost" id="btn-copy-code">Sao chép mã đồng bộ</button>
+          <button class="btn btn-ghost" id="btn-share" hidden>Chia sẻ file backup</button>
+        </div>
+        <textarea id="code-input" class="sync-code" rows="3" placeholder="Dán mã đồng bộ (bắt đầu bằng APS1:) vào đây" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+        <div class="settings-row"><button class="btn btn-ghost" id="btn-merge-code">Gộp mã</button></div>
       </div>
     </section>
   </main>

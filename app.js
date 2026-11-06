@@ -1695,23 +1695,97 @@
     return result;
   }
 
+  // Asks, merges a backup (from a file or a sync code) into this device's progress and reports the result.
+  function confirmAndMerge(data) {
+    if (!data || !data.cards || !data.days) throw new Error("not a backup");
+    if (!confirm("Gộp backup này vào tiến độ hiện tại?\n\nMỗi thẻ giữ lần ôn mới nhất từ hai bên, lịch sử các ngày học và các lần thi thử được gộp lại. Cài đặt trên máy này giữ nguyên.")) return false;
+    const r = mergeBackup(data);
+    save();
+    renderProgress();
+    alert(`Đã gộp backup: ${r.cards} thẻ lấy theo backup, ${r.days} ngày học, ${r.mocks} lần thi thử mới.`);
+    return true;
+  }
+
   $("#file-import").addEventListener("change", async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     try {
-      const data = JSON.parse(await file.text());
-      if (!data.cards || !data.days) throw new Error("not a backup");
-      if (!confirm("Gộp file backup này vào tiến độ hiện tại?\n\nMỗi thẻ giữ lần ôn mới nhất từ hai bên, lịch sử các ngày học và các lần thi thử được gộp lại. Cài đặt trên máy này giữ nguyên.")) return;
-      const r = mergeBackup(data);
-      save();
-      renderProgress();
-      alert(`Đã gộp backup: ${r.cards} thẻ lấy theo backup, ${r.days} ngày học, ${r.mocks} lần thi thử mới.`);
+      confirmAndMerge(JSON.parse(await file.text()));
     } catch (err) {
       alert("File không hợp lệ: " + err.message);
     } finally {
       e.target.value = "";
     }
   });
+
+  // ---------- sync code: copy the progress on one device, paste it on another ----------
+  // "APS1:" + base64url(gzip(JSON)). Browsers without CompressionStream use "APS0:" + base64url(JSON); both are read everywhere
+  // the streams exist (APS0 needs nothing). The code holds only study progress, not the card text.
+  const toB64u = (bytes) => {
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  };
+  const fromB64u = (text) => {
+    if (!/^[A-Za-z0-9_-]+$/.test(text)) throw new Error("ký tự lạ trong mã");
+    const bin = atob(text.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((text.length + 3) % 4));
+    return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  };
+  const pipeBytes = async (bytes, stream) => {
+    const writer = stream.writable.getWriter();
+    writer.write(bytes).catch(() => {});
+    writer.close().catch(() => {});
+    return new Uint8Array(await new Response(stream.readable).arrayBuffer());
+  };
+  async function encodeSyncCode(obj) {
+    const bytes = new TextEncoder().encode(JSON.stringify(obj));
+    if (typeof CompressionStream === "undefined") return "APS0:" + toB64u(bytes);
+    return "APS1:" + toB64u(await pipeBytes(bytes, new CompressionStream("gzip")));
+  }
+  async function decodeSyncCode(text) {
+    const code = String(text).replace(/\s+/g, "");
+    if (!code) throw new Error("Dán mã đồng bộ vào ô trước");
+    const kind = code.slice(0, 5);
+    if (kind !== "APS0:" && kind !== "APS1:") throw new Error("mã phải bắt đầu bằng APS1:");
+    let bytes = fromB64u(code.slice(5));
+    if (kind === "APS1:") {
+      if (typeof DecompressionStream === "undefined") throw new Error("trình duyệt này không giải nén được mã APS1, dùng file backup");
+      bytes = await pipeBytes(bytes, new DecompressionStream("gzip"));
+    }
+    const data = JSON.parse(new TextDecoder().decode(bytes));
+    if (!data.cards || !data.days) throw new Error("không phải mã tiến độ");
+    return data;
+  }
+  $("#btn-copy-code").addEventListener("click", async () => {
+    const code = await encodeSyncCode(state);
+    try {
+      await navigator.clipboard.writeText(code);
+      alert(`Đã sao chép mã đồng bộ (${code.length} ký tự). Dán mã vào ô "Gộp mã" trên máy kia.`);
+    } catch (err) {
+      const box = $("#code-input");
+      box.value = code;
+      box.focus();
+      box.select();
+      alert("Không tự sao chép được. Mã đã hiện trong ô bên dưới: hãy chọn hết và sao chép.");
+    }
+  });
+  $("#btn-merge-code").addEventListener("click", async () => {
+    const box = $("#code-input");
+    try {
+      if (confirmAndMerge(await decodeSyncCode(box.value))) box.value = "";
+    } catch (err) {
+      alert("Mã không hợp lệ: " + err.message + ". Dán đủ cả mã (bắt đầu bằng APS1:).");
+    }
+  });
+  // Phones: the share sheet sends the backup file to Zalo, Drive, AirDrop and so on.
+  if (navigator.share && navigator.canShare) {
+    $("#btn-share").hidden = false;
+    $("#btn-share").addEventListener("click", async () => {
+      const file = new File([JSON.stringify(state, null, 1)], `aps-prep-backup-${today()}.json`, { type: "application/json" });
+      if (!navigator.canShare({ files: [file] })) { alert("Máy này không chia sẻ được file. Dùng Sao chép mã đồng bộ hoặc Xuất backup."); return; }
+      try { await navigator.share({ files: [file], title: "APS Prep backup" }); } catch (err) { /* cancelled */ }
+    });
+  }
   $("#btn-reset").addEventListener("click", () => {
     if (!confirm("Xóa toàn bộ tiến độ và lịch sử điểm danh? Không thể hoàn tác (trừ khi bạn có file backup).")) return;
     state = defaultState();
