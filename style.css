@@ -192,7 +192,7 @@ i.seg-m { background: var(--good); } i.seg-l { background: var(--heat2); } i.seg
 .settings-row label { display: flex; flex-direction: column; font-size: 0.8rem; color: var(--muted); gap: 4px; }
 .settings-row label.btn { display: inline-block; font-size: 1rem; color: var(--ink); }
 .sync-title { margin-top: 20px; }
-.sync-code { width: 100%; box-sizing: border-box; margin: 4px 0; padding: 10px; font: inherit; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.8rem; color: var(--ink); background: var(--card, transparent); border: 1px solid var(--line, #8884); border-radius: 8px; resize: vertical; }
+.sync-code { width: 100%; box-sizing: border-box; margin: 4px 0; padding: 10px; font: inherit; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.8rem; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; resize: vertical; }
 
 .foot { text-align: center; padding: 8px 16px 24px; }
 
